@@ -10,6 +10,26 @@ class MeteringError(Exception):
     """Usage cap exceeded or subscription inactive."""
 
 
+def trial_days_remaining(tenant: dict) -> int | None:
+    """Days left in signup trial, or None if not on trial."""
+    if config.SIGNUP_TRIAL_DAYS <= 0:
+        return None
+    if tenant.get("billing_status") == "active":
+        return None
+    created = tenant.get("created_at")
+    if not created:
+        return None
+    try:
+        start = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        end = start + timedelta(days=config.SIGNUP_TRIAL_DAYS)
+        remaining = (end - datetime.now(UTC)).days
+        return max(0, remaining)
+    except ValueError:
+        return None
+
+
 def _trial_expired(tenant: dict) -> bool:
     if config.SIGNUP_TRIAL_DAYS <= 0:
         return False
@@ -55,18 +75,20 @@ def usage_snapshot(tenant_id: str) -> dict:
             }
         )
     elif tenant.get("billing_status") == "trialing" and config.SIGNUP_TRIAL_DAYS > 0:
-        warnings.append(
-            {
-                "kind": "trial_active",
-                "pct": 0,
-                "message": f"Trial active — {config.SIGNUP_TRIAL_DAYS} days from signup",
-            }
+        days_left = trial_days_remaining(tenant)
+        msg = (
+            f"Trial — {days_left} day(s) remaining"
+            if days_left is not None
+            else f"Trial active — {config.SIGNUP_TRIAL_DAYS} days from signup"
         )
+        warnings.append({"kind": "trial_active", "pct": 0, "message": msg})
     return {
         "tenant": usage,
         "caps": {"monthly_recommends": cap},
         "warnings": warnings,
         "trial_expired": _trial_expired(tenant),
+        "trial_days_remaining": trial_days_remaining(tenant),
+        "needs_subscription": tenant.get("billing_status") not in {"active"},
     }
 
 

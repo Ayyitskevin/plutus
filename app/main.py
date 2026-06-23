@@ -1551,15 +1551,20 @@ def ui_saas_billing(
     success: str | None = Query(None),
     cancelled: str | None = Query(None),
 ):
-    ctx = _ui_saas_auth(request)
-    if ctx is None:
-        return RedirectResponse("/ui/saas/login", status_code=303)
+    ctx = _tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    from .metering import usage_snapshot
+
+    usage = usage_snapshot(ctx.tenant_id)
     return templates.TemplateResponse(
         request,
         "saas_billing.html",
         _ui_context(
             title="Billing",
             tenant=ctx.tenant,
+            usage=usage,
+            subscription=billing.tenant_subscription_view(ctx.tenant),
             billing_success=bool(success),
             billing_cancelled=bool(cancelled),
             billing_info=billing.billing_status(),
@@ -1569,16 +1574,25 @@ def ui_saas_billing(
 
 @app.post("/ui/saas/billing/checkout")
 def ui_saas_billing_checkout(request: Request):
-    ctx = verify_api_access(request)
-    if not ctx.tenant:
-        return error("tenant API key required", 403)
+    ctx = _tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
     try:
         session = billing.create_checkout_session(ctx.tenant_id)
     except billing.BillingError as exc:
+        from .metering import usage_snapshot
+
         return templates.TemplateResponse(
             request,
             "saas_billing.html",
-            _ui_context(title="Billing", tenant=ctx.tenant, billing_error=str(exc)),
+            _ui_context(
+                title="Billing",
+                tenant=ctx.tenant,
+                usage=usage_snapshot(ctx.tenant_id),
+                subscription=billing.tenant_subscription_view(ctx.tenant),
+                billing_error=str(exc),
+                billing_info=billing.billing_status(),
+            ),
             status_code=400,
         )
     audit.record("billing.checkout", request=request, ctx=ctx, detail=session)
@@ -1587,16 +1601,25 @@ def ui_saas_billing_checkout(request: Request):
 
 @app.post("/ui/saas/billing/portal")
 def ui_saas_billing_portal(request: Request):
-    ctx = verify_api_access(request)
-    if not ctx.tenant:
-        return error("tenant API key required", 403)
+    ctx = _tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
     try:
         portal = billing.create_billing_portal_session(ctx.tenant_id)
     except billing.BillingError as exc:
+        from .metering import usage_snapshot
+
         return templates.TemplateResponse(
             request,
             "saas_billing.html",
-            _ui_context(title="Billing", tenant=ctx.tenant, billing_error=str(exc)),
+            _ui_context(
+                title="Billing",
+                tenant=ctx.tenant,
+                usage=usage_snapshot(ctx.tenant_id),
+                subscription=billing.tenant_subscription_view(ctx.tenant),
+                billing_error=str(exc),
+                billing_info=billing.billing_status(),
+            ),
             status_code=400,
         )
     return RedirectResponse(portal["portal_url"], status_code=303)

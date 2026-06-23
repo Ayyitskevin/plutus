@@ -51,6 +51,23 @@ def billing_status() -> dict:
     }
 
 
+def tenant_subscription_view(tenant: dict | None) -> dict[str, Any]:
+    """UI-friendly subscription summary for a tenant row."""
+    if not tenant:
+        return {"linked": False}
+    status = tenant.get("billing_status") or "trialing"
+    active = status == "active"
+    return {
+        "linked": bool(tenant.get("stripe_customer_id")),
+        "status": status,
+        "plan_tier": tenant.get("plan_tier") or "trial",
+        "monthly_recommend_cap": tenant.get("monthly_recommend_cap"),
+        "is_active": active,
+        "can_subscribe": billing_enabled() and not active,
+        "can_manage": billing_enabled() and bool(tenant.get("stripe_customer_id")),
+    }
+
+
 def stripe_connectivity() -> dict[str, Any]:
     """Ping Stripe API when configured (for health / dogfood)."""
     if not stripe_configured():

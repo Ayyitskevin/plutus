@@ -32,11 +32,29 @@
 </div>
 
 {% if portal_mode == 'tenant' %}
-{% if cap_warnings %}
+{% if usage.needs_subscription and tenant.billing_status != 'active' %}
+<div class="warn-banner" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+  <div>
+    <strong>{% if usage.trial_expired %}Trial ended{% else %}Upgrade to Pro{% endif %}</strong>
+    <p class="small" style="margin:.25rem 0 0">
+      {% if usage.trial_days_remaining is not none and not usage.trial_expired %}
+      {{ usage.trial_days_remaining }} day(s) left on your trial.
+      {% elif usage.trial_expired %}
+      Subscribe to keep recommending bundles and accepting client orders.
+      {% else %}
+      Unlock higher caps and full storefront checkout.
+      {% endif %}
+    </p>
+  </div>
+  {% if billing_enabled %}
+  <a class="btn" href="/ui/saas/billing">View billing</a>
+  {% endif %}
+</div>
+{% elif cap_warnings %}
 <div class="warn-banner">
   <strong>Approaching usage cap</strong>
   <ul class="small" style="margin:.35rem 0 0;padding-left:1.1rem">
-    {% for w in cap_warnings %}<li>{{ w.message }} ({{ w.pct }}%)</li>{% endfor %}
+    {% for w in cap_warnings if w.kind != 'trial_active' %}<li>{{ w.message }}{% if w.pct %} ({{ w.pct }}%){% endif %}</li>{% endfor %}
   </ul>
 </div>
 {% endif %}
