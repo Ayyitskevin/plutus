@@ -191,30 +191,44 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
     tenant_id = metadata.get("tenant_id")
     checkout_kind = metadata.get("checkout_kind")
 
+    def _resolve_tenant_id() -> str | None:
+        if tenant_id:
+            return tenant_id
+        meta_tid = (obj.get("metadata") or {}).get("tenant_id")
+        if meta_tid:
+            return meta_tid
+        customer_id = obj.get("customer")
+        if customer_id:
+            row = db.get_tenant_by_stripe_customer(str(customer_id))
+            if row:
+                return row["id"]
+        return None
+
     if etype == "checkout.session.completed":
         if checkout_kind == "client_bundle" or metadata.get("order_id"):
             orders_mod.handle_checkout_completed(obj)
             return
         sub_id = obj.get("subscription")
         customer_id = obj.get("customer")
-        if tenant_id:
+        tid = _resolve_tenant_id()
+        if tid:
             db.update_tenant(
-                tenant_id,
+                tid,
                 stripe_customer_id=customer_id,
                 stripe_subscription_id=sub_id,
                 billing_status="active",
                 plan_tier="pro",
                 monthly_recommend_cap=500,
             )
-            log.info("activated billing for tenant %s", tenant_id)
+            log.info("activated billing for tenant %s", tid)
         return
 
     if etype in {"customer.subscription.updated", "customer.subscription.created"}:
-        tenant_id = tenant_id or (obj.get("metadata") or {}).get("tenant_id")
+        tid = _resolve_tenant_id()
         status = obj.get("status")
-        if tenant_id and status:
+        if tid and status:
             db.update_tenant(
-                tenant_id,
+                tid,
                 stripe_subscription_id=obj.get("id"),
                 billing_status=status,
                 active=status in {"active", "trialing"},
@@ -222,12 +236,19 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
         return
 
     if etype == "customer.subscription.deleted":
-        tenant_id = tenant_id or (obj.get("metadata") or {}).get("tenant_id")
-        if tenant_id:
+        tid = _resolve_tenant_id()
+        if tid:
             db.update_tenant(
-                tenant_id,
+                tid,
                 billing_status="canceled",
                 plan_tier="free",
                 stripe_subscription_id=None,
             )
+        return
+
+    if etype == "invoice.payment_failed":
+        tid = _resolve_tenant_id()
+        if tid:
+            db.update_tenant(tid, billing_status="past_due", active=False)
+            log.warning("tenant %s marked past_due after invoice.payment_failed", tid)
         return

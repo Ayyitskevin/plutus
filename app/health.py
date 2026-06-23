@@ -9,10 +9,10 @@ from . import billing, config, db, homelab
 def _check_database() -> dict[str, str]:
     try:
         if db.ping():
-            return {"status": "ok"}
-        return {"status": "error", "detail": "ping failed"}
+            return {"status": "ok", "backend": db.backend_name()}
+        return {"status": "error", "detail": "ping failed", "backend": db.backend_name()}
     except Exception as exc:
-        return {"status": "error", "detail": str(exc)}
+        return {"status": "error", "detail": str(exc), "backend": db.backend_name()}
 
 
 def _check_store_billing() -> dict[str, str | bool]:

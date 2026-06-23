@@ -1,4 +1,4 @@
-"""SQLite persistence for galleries, recommendations, tenants, and orders."""
+"""Persistence for galleries, recommendations, tenants, and orders (SQLite or Postgres)."""
 from __future__ import annotations
 
 import json
@@ -9,6 +9,21 @@ from datetime import datetime
 from typing import Any
 
 from . import config
+
+
+def _use_postgres() -> bool:
+    return config.DB_BACKEND == "postgres"
+
+
+def _insert_id(con: Any, sql: str, params: tuple) -> int:
+    if _use_postgres():
+        cur = con.execute(f"{sql.rstrip()} RETURNING id", params)
+        row = cur.fetchone()
+        if not row:
+            raise RuntimeError("insert did not return id")
+        return int(row["id"])
+    cur = con.execute(sql, params)
+    return int(cur.lastrowid)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS galleries (
@@ -168,7 +183,7 @@ CREATE INDEX IF NOT EXISTS idx_upload_batches_tenant ON upload_batches(tenant_id
 """
 
 
-def _connect() -> sqlite3.Connection:
+def _sqlite_connect() -> sqlite3.Connection:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(config.DB_PATH)
     con.row_factory = sqlite3.Row
@@ -178,8 +193,8 @@ def _connect() -> sqlite3.Connection:
 
 
 @contextmanager
-def connection() -> Iterator[sqlite3.Connection]:
-    con = _connect()
+def _sqlite_connection() -> Iterator[sqlite3.Connection]:
+    con = _sqlite_connect()
     try:
         yield con
         con.commit()
@@ -187,14 +202,34 @@ def connection() -> Iterator[sqlite3.Connection]:
         con.close()
 
 
+@contextmanager
+def connection() -> Iterator[Any]:
+    if _use_postgres():
+        from . import db_pg
+
+        with db_pg.connection() as con:
+            yield con
+        return
+    with _sqlite_connection() as con:
+        yield con
+
+
 def ping() -> bool:
-    with connection() as con:
+    if _use_postgres():
+        from . import db_pg
+
+        return db_pg.ping()
+    with _sqlite_connection() as con:
         con.execute("SELECT 1")
     return True
 
 
-def migrate() -> None:
-    with connection() as con:
+def backend_name() -> str:
+    return config.DB_BACKEND
+
+
+def _sqlite_migrate() -> None:
+    with _sqlite_connection() as con:
         con.executescript(_SCHEMA)
         gallery_cols = {r[1] for r in con.execute("PRAGMA table_info(galleries)")}
         for col, typ in [("mise_gallery_id", "INTEGER"), ("tenant_id", "TEXT")]:
@@ -230,6 +265,15 @@ def migrate() -> None:
                 con.execute(f"ALTER TABLE upload_batches ADD COLUMN {col} {typ}")
 
 
+def migrate() -> None:
+    if _use_postgres():
+        from . import db_pg
+
+        db_pg.migrate()
+        return
+    _sqlite_migrate()
+
+
 # --- Galleries & runs ---
 
 
@@ -242,12 +286,12 @@ def insert_gallery(
     tenant_id: str | None = None,
 ) -> int:
     with connection() as con:
-        cur = con.execute(
+        return _insert_id(
+            con,
             """INSERT INTO galleries (name, source, photo_count, mise_gallery_id, tenant_id)
                VALUES (?,?,?,?,?)""",
             (name, source, photo_count, mise_gallery_id, tenant_id),
         )
-        return int(cur.lastrowid)
 
 
 def insert_run(
@@ -260,7 +304,8 @@ def insert_run(
     tenant_id: str | None = None,
 ) -> int:
     with connection() as con:
-        cur = con.execute(
+        return _insert_id(
+            con,
             """INSERT INTO recommendation_runs
                (gallery_id, engine, bundle_count, estimated_total_cents, payload_json, tenant_id)
                VALUES (?,?,?,?,?,?)""",
@@ -273,7 +318,6 @@ def insert_run(
                 tenant_id,
             ),
         )
-        return int(cur.lastrowid)
 
 
 def get_run(run_id: int, *, tenant_id: str | None = None) -> dict[str, Any] | None:
@@ -376,6 +420,15 @@ def create_tenant(
 def get_tenant(tenant_id: str) -> dict | None:
     with connection() as con:
         row = con.execute("SELECT * FROM tenants WHERE id=?", (tenant_id,)).fetchone()
+    return _tenant_dict(row)
+
+
+def get_tenant_by_stripe_customer(stripe_customer_id: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            "SELECT * FROM tenants WHERE stripe_customer_id=?",
+            (stripe_customer_id,),
+        ).fetchone()
     return _tenant_dict(row)
 
 
@@ -631,6 +684,13 @@ def record_stripe_webhook_event(event_id: str, event_type: str) -> bool:
             return True
         except sqlite3.IntegrityError:
             return False
+        except Exception as exc:
+            if _use_postgres():
+                from psycopg.errors import UniqueViolation
+
+                if isinstance(exc, UniqueViolation):
+                    return False
+            raise
 
 
 # --- Storefront tokens ---
@@ -696,7 +756,8 @@ def create_order(
 
     token = client_token or secrets.token_urlsafe(18)
     with connection() as con:
-        cur = con.execute(
+        order_id = _insert_id(
+            con,
             """INSERT INTO orders
                (tenant_id, run_id, bundle_index, total_cents,
                 client_email, client_name, stripe_session_id, client_token)
@@ -712,7 +773,6 @@ def create_order(
                 token,
             ),
         )
-        order_id = int(cur.lastrowid)
         for item in items:
             con.execute(
                 """INSERT INTO order_items (order_id, sku, label, quantity, unit_cents)

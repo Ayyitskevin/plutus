@@ -62,6 +62,20 @@ def validate_saas_startup() -> None:
             "PLUTUS_TENANT_KEY_PEPPER is weak or equals admin token — "
             "set a distinct secret in production"
         )
+    from . import billing
+
+    if billing.stripe_configured():
+        if config.ALLOW_SIMULATE_PAYMENT and not billing.stripe_test_mode():
+            log.warning(
+                "PLUTUS_ALLOW_SIMULATE_PAYMENT is on with live Stripe keys — disable in prod"
+            )
+        if not billing.billing_enabled():
+            log.warning(
+                "STRIPE_PRICE_ID missing — tenant subscriptions disabled; "
+                "client bundle checkout still works with STRIPE_SECRET_KEY"
+            )
+        if not config.STRIPE_WEBHOOK_SECRET:
+            log.warning("STRIPE_WEBHOOK_SECRET unset — /webhooks/stripe will reject events")
 
 
 def tenant_scope(ctx: AuthContext | None) -> str | None:

@@ -12,6 +12,8 @@ load_dotenv(_ROOT / ".env", override=False)
 
 DATA_DIR = Path(os.environ.get("PLUTUS_DATA_DIR", _ROOT / "data"))
 DB_PATH = DATA_DIR / "plutus.db"
+DATABASE_URL = os.environ.get("PLUTUS_DATABASE_URL") or None
+DB_BACKEND = "postgres" if DATABASE_URL else "sqlite"
 
 HOST = os.environ.get("PLUTUS_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PLUTUS_PORT", "8030"))

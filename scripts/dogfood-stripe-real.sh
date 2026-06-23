@@ -50,14 +50,16 @@ curl -sf -X POST "$BASE/ui/saas/app/upload" \
   -F "gallery_name=Stripe demo" \
   -F "files=@${IMG}" -o /dev/null
 BATCH_ID=$(python3 - <<PY
-import sqlite3
+import os, sys
 from pathlib import Path
-con = sqlite3.connect("${ROOT}/data/plutus.db")
-row = con.execute(
-    "SELECT id FROM upload_batches WHERE tenant_id=? ORDER BY created_at DESC LIMIT 1",
-    ("${SLUG}",),
-).fetchone()
-print(row[0] if row else "")
+sys.path.insert(0, "${ROOT}")
+os.chdir("${ROOT}")
+from dotenv import load_dotenv
+load_dotenv("${ROOT}/.env", override=True)
+from app import config, db
+db.migrate()
+rows = db.list_upload_batches(tenant_id="${SLUG}", limit=1)
+print(rows[0]["id"] if rows else "")
 PY
 )
 test -n "$BATCH_ID"
