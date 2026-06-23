@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <p><span class="tag">{{ photo_count }} photos</span>
+     <span class="tag">engine {{ run.engine }}</span>
+     <span class="tag">est. {{ estimated_total_cents | money }}</span></p>
+  <h2 style="margin:.5rem 0 0">Upsell bundles</h2>
+  <p style="color:var(--muted);margin:0 0 1rem">Client-facing recommendations — tune before sending.</p>
+</div>
+
+{% for bundle in bundles %}
+<div class="card bundle">
+  <h3>{{ bundle.title }}</h3>
+  <p class="pitch">{{ bundle.pitch }}</p>
+  {% for item in bundle.get('items') or [] %}
+  <div class="item">
+    <div>
+      <strong>{{ item.label }} {{ item.size }}</strong><br>
+      <span style="color:var(--muted)">{{ item.photo.filename }} — {{ item.rationale }}</span>
+    </div>
+    <div class="money">{{ item.line_cents | money }}</div>
+  </div>
+  {% endfor %}
+  {% if bundle.get('photo_slots') %}
+  <p style="font-size:.85rem;color:var(--muted);margin:.75rem 0 0">
+    Suggested photos: {{ bundle.photo_slots | join(', ') }}
+  </p>
+  {% endif %}
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3 style="margin-top:0">Top-scoring frames</h3>
+  {% for p in top_photos %}
+  <span class="tag">{{ p.filename }} ({{ '%.2f'|format(p.score) }})</span>
+  {% endfor %}
+  <p style="margin:1rem 0 0">
+    <a class="btn" href="/runs/{{ run.id }}/json">JSON export</a>
+    <a class="btn" href="/" style="background:var(--muted);margin-left:.5rem">New run</a>
+  </p>
+</div>
+{% endblock %}
