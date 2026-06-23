@@ -589,9 +589,9 @@ def increment_tenant_usage(
                (tenant_id, period, recommends, orders, revenue_cents, updated_at)
                VALUES (?, ?, ?, ?, ?, datetime('now'))
                ON CONFLICT(tenant_id, period) DO UPDATE SET
-                 recommends = recommends + excluded.recommends,
-                 orders = orders + excluded.orders,
-                 revenue_cents = revenue_cents + excluded.revenue_cents,
+                 recommends = tenant_usage.recommends + excluded.recommends,
+                 orders = tenant_usage.orders + excluded.orders,
+                 revenue_cents = tenant_usage.revenue_cents + excluded.revenue_cents,
                  updated_at = datetime('now')""",
             (tenant_id, period, recommends, orders, revenue_cents),
         )

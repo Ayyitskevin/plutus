@@ -5,6 +5,7 @@ import logging
 import secrets
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date, datetime
 from typing import Any
 
 from . import config
@@ -167,6 +168,22 @@ CREATE INDEX IF NOT EXISTS idx_upload_batches_tenant ON upload_batches(tenant_id
 """
 
 
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _normalize_row(row: Any) -> Any:
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return {k: _normalize_value(v) for k, v in row.items()}
+    return row
+
+
 def _adapt_sql(sql: str) -> str:
     out = sql
     out = out.replace("datetime('now')", "NOW()")
@@ -186,10 +203,10 @@ class _Cursor:
         self.rowcount: int = 0
 
     def fetchone(self) -> Any:
-        return self._cur.fetchone()
+        return _normalize_row(self._cur.fetchone())
 
     def fetchall(self) -> list[Any]:
-        return self._cur.fetchall()
+        return [_normalize_row(row) for row in self._cur.fetchall()]
 
 
 class _Connection:

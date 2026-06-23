@@ -34,6 +34,41 @@ def test_postgres_ping_and_migrate(pg_env):
     assert db.ping()
 
 
+def test_postgres_storefront_token_json_safe(pg_env):
+    tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
+    gid = db.insert_gallery(name="G", source="/x", photo_count=1, tenant_id="pgco")
+    rid = db.insert_run(
+        gallery_id=gid,
+        engine="mock",
+        bundle_count=1,
+        estimated_total_cents=1200,
+        payload={"bundles": []},
+        tenant_id="pgco",
+    )
+    row = db.create_storefront_token(
+        token="tok123",
+        tenant_id="pgco",
+        run_id=rid,
+        label="demo",
+    )
+    import json
+
+    json.dumps(row)
+    assert row["created_at"]
+
+
+def test_postgres_increment_tenant_usage(pg_env):
+    tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
+    db.increment_tenant_usage("pgco", recommends=2, orders=1, revenue_cents=500)
+    usage = db.get_tenant_usage("pgco")
+    assert usage["recommends"] == 2
+    assert usage["orders"] == 1
+    assert usage["revenue_cents"] == 500
+    db.increment_tenant_usage("pgco", recommends=1)
+    usage = db.get_tenant_usage("pgco")
+    assert usage["recommends"] == 3
+
+
 def test_postgres_tenant_and_run_roundtrip(pg_env):
     tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
     gid = db.insert_gallery(name="G", source="/x", photo_count=2, tenant_id="pgco")

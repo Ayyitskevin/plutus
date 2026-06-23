@@ -253,7 +253,7 @@ async def recommend_upload_batch_api(
 ) -> JSONResponse:
     if not config.SAAS_MODE or not ctx.tenant_id:
         raise HTTPException(status_code=403, detail="tenant API key required")
-    async_mode = None if sync else config.UPLOAD_ASYNC_ANALYZE
+    async_mode = False if sync else None
     try:
         result = service.analyze_upload_batch(
             batch_id,

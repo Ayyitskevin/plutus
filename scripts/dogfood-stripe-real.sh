@@ -45,10 +45,14 @@ test -n "$API_KEY"
 
 DEMO="${PLUTUS_DOGFOOD_GALLERY:-$HOME/ai-workspace/argus/data/demo}"
 IMG=$(find "$DEMO" -maxdepth 1 -name '*.jpg' | head -1)
-curl -sf -X POST "$BASE/ui/saas/app/upload" \
+UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/ui/saas/app/upload" \
   -H "Cookie: plutus_ui_token=${API_KEY}" \
   -F "gallery_name=Stripe demo" \
-  -F "files=@${IMG}" -o /dev/null
+  -F "files=@${IMG}")
+if [[ "$UPLOAD_CODE" != "303" && "$UPLOAD_CODE" != "200" ]]; then
+  echo "upload failed HTTP $UPLOAD_CODE" >&2
+  exit 1
+fi
 BATCH_ID=$(python3 - <<PY
 import os, sys
 from pathlib import Path
@@ -66,7 +70,13 @@ test -n "$BATCH_ID"
 RUN_JSON=$(curl -sf -X POST "$BASE/recommend/upload-batch" \
   -H "Authorization: Bearer ${API_KEY}" \
   -d "batch_id=${BATCH_ID}&sync=1")
-RUN_ID=$(echo "$RUN_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['run_id'])")
+RUN_ID=$(echo "$RUN_JSON" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+if d.get('queued'):
+    raise SystemExit('batch still queued — set PLUTUS_UPLOAD_ASYNC_ANALYZE=false or wait')
+print(d['run_id'])
+")
 echo "  run_id=$RUN_ID"
 
 echo "==> Share link + Stripe checkout session"
@@ -78,36 +88,42 @@ CHECKOUT_URL=$(curl -sf -X POST "${OFFER}/checkout" \
   -d "bundle_index=0&client_email=stripe-buyer@dogfood.test&client_name=Stripe+Buyer" \
   -D - -o /dev/null | grep -i '^location:' | awk '{print $2}' | tr -d '\r')
 echo "  checkout_url=$CHECKOUT_URL"
-echo "  Pay with test card 4242 4242 4242 4242 (any future date, any CVC)"
+if curl -sf "$BASE/saas/billing/status" | python3 -c "import json,sys; exit(0 if json.load(sys.stdin).get('test_mode') else 1)" 2>/dev/null; then
+  echo "  Pay with test card 4242 4242 4242 4242 (any future date, any CVC)"
+else
+  echo "  LIVE Stripe checkout — real card required (or use simulated webhook below)"
+fi
 
 ORDER_ID=$(python3 - <<PY
-import sqlite3
+import os, sys
 from pathlib import Path
-con = sqlite3.connect("${ROOT}/data/plutus.db")
-row = con.execute(
-    "SELECT id, stripe_session_id FROM orders WHERE tenant_id=? ORDER BY id DESC LIMIT 1",
-    ("${SLUG}",),
-).fetchone()
-print(row[0])
-open("/tmp/plutus_cs.txt","w").write(row[1] or "")
+sys.path.insert(0, "${ROOT}")
+os.chdir("${ROOT}")
+from dotenv import load_dotenv
+load_dotenv("${ROOT}/.env", override=True)
+from app import db
+db.migrate()
+rows = db.list_orders(tenant_id="${SLUG}", limit=1)
+row = rows[0] if rows else {}
+print(row.get("id", ""))
+open("/tmp/plutus_cs.txt", "w").write(row.get("stripe_session_id") or "")
 PY
 )
 SESSION_ID=$(cat /tmp/plutus_cs.txt)
 echo "  order_id=$ORDER_ID session=$SESSION_ID"
 
 echo "==> Simulate webhook (signed) — use after paying, or for CI without browser"
-ROOT="${ROOT}" python3 - <<'PY'
+ROOT="${ROOT}" ORDER_ID="${ORDER_ID}" SESSION_ID="${SESSION_ID}" TENANT_ID="${SLUG}" python3 - <<'PY'
 import json, os, sys
 from pathlib import Path
 sys.path.insert(0, os.environ["ROOT"])
 from dotenv import load_dotenv
 load_dotenv(".env")
-from app import billing, config
-config.DATA_DIR = Path("data")
-config.DB_PATH = config.DATA_DIR / "plutus.db"
-order_id = sys.argv[1]
-session_id = sys.argv[2]
-tenant_id = sys.argv[3]
+from app import billing, config, db
+db.migrate()
+order_id = os.environ["ORDER_ID"]
+session_id = os.environ["SESSION_ID"]
+tenant_id = os.environ["TENANT_ID"]
 event = {
     "id": f"evt_dogfood_{order_id}",
     "type": "checkout.session.completed",
@@ -131,6 +147,5 @@ base = f"http://{os.environ.get('PLUTUS_HOST', '127.0.0.1')}:{os.environ.get('PL
 r = httpx.post(f"{base}/webhooks/stripe", content=payload, headers={"stripe-signature": sig})
 print("  webhook HTTP", r.status_code, r.json())
 PY
-"$ORDER_ID" "$SESSION_ID" "$SLUG"
 
 echo "==> Stripe dogfood OK — open checkout URL to pay for real, or webhook already simulated"

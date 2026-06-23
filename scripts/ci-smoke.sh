@@ -21,6 +21,7 @@ echo "==> ruff check"
 "$RUFF" check app tests
 
 echo "==> pytest"
-"$PYTEST" tests/ -q
+# Force SQLite in tests when .env points at dev Postgres
+PLUTUS_DATABASE_URL= "$PYTEST" tests/ -q
 
 echo "==> CI smoke OK ($( "$PYTEST" tests/ --collect-only -q 2>/dev/null | tail -1 ))"
