@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .steps { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .step { padding: .35rem .75rem; border-radius: 999px; font-size: .82rem; background: #eee; color: var(--muted); }
+  .step.active { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+  .step.done { background: #e8f5e9; color: #2e7d32; }
+  .offer-box { background: #f6f8fa; border: 1px solid #dde3ea; border-radius: 8px; padding: .85rem 1rem; margin-top: .75rem; }
+  .offer-box code { word-break: break-all; font-size: .85rem; }
+  .inline-form { display: inline; }
+  .secondary { background: #eee; color: var(--ink); }
+  .status-ok { color: var(--accent); }
+  .err { color: #a11; }
+  .small { font-size: .85rem; color: var(--muted); }
+</style>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+    <h2 style="margin:0">Publish &amp; sell</h2>
+    <div>
+      <a class="btn secondary" href="/ui/saas/app">Dashboard</a>
+      <a class="btn secondary" href="/ui/saas/app/catalog">Pricing</a>
+    </div>
+  </div>
+  <p class="small" style="margin:.5rem 0 0">Upload a gallery → generate bundles → share a client offer link in one flow.</p>
+</div>
+
+<div class="steps">
+  <span class="step {% if step == 1 %}active{% elif step > 1 %}done{% endif %}">1 · Upload</span>
+  <span class="step {% if step == 2 %}active{% elif step > 2 %}done{% endif %}">2 · Bundles</span>
+  <span class="step {% if step == 3 %}active{% endif %}">3 · Offer link</span>
+</div>
+
+{% if sell_message %}<p class="status-ok">{{ sell_message }}</p>{% endif %}
+{% if sell_error %}<p class="err">{{ sell_error }}</p>{% endif %}
+
+{% if step == 3 and offer_url %}
+<div class="card">
+  <h3 style="margin-top:0">Client offer ready</h3>
+  <p class="small">Send this link to your client — they can browse packages and checkout online.</p>
+  <div class="offer-box">
+    <code id="offer-url">{{ offer_url }}</code>
+  </div>
+  <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+    <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('offer-url').textContent)">Copy link</button>
+    <a class="btn secondary" href="{{ offer_url }}" target="_blank" rel="noopener">Preview offer</a>
+    {% if run_id %}<a class="btn secondary" href="/runs/{{ run_id }}">Review run</a>{% endif %}
+  </div>
+</div>
+{% elif step == 2 and run %}
+<div class="card">
+  <h3 style="margin-top:0">{{ run.gallery_name or 'Gallery' }} — {{ bundles|length }} bundle{{ 's' if bundles|length != 1 else '' }}</h3>
+  <p class="small">Est. {{ run.estimated_total_cents|money }} · engine {{ run.engine }}</p>
+  {% for bundle in bundles %}
+  <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid #eee">
+    <strong>{{ bundle.title or ('Bundle ' ~ loop.index) }}</strong>
+    <span class="small"> — {{ bundle.total_cents|money if bundle.total_cents else 'priced at checkout' }}</span>
+    {% if bundle.pitch %}<p class="small" style="margin:.25rem 0 0">{{ bundle.pitch }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <form method="post" action="/ui/saas/app/sell" style="margin-top:1.25rem">
+    <input type="hidden" name="action" value="publish_run">
+    <input type="hidden" name="run_id" value="{{ run.id }}">
+    <label class="small">Offer label (shown to client)
+      <input type="text" name="label" placeholder="{{ tenant.name }} client offer" value="{{ tenant.name }}">
+    </label>
+    <button type="submit" style="margin-top:.75rem">Create client offer link</button>
+  </form>
+</div>
+{% else %}
+{% if analyzing_batch_id %}
+<div class="card" id="analyze-progress" data-batch-id="{{ analyzing_batch_id }}" data-auto="{{ '1' if auto_publish else '0' }}">
+  <h3 style="margin-top:0">Analyzing gallery…</h3>
+  <p class="small" id="analyze-status-text">Queued — vision scoring and bundle recommendations run in the background.</p>
+  <p class="small" style="color:var(--muted)">{% if auto_publish %}We'll publish your offer link when analysis finishes.{% else %}You can leave this page.{% endif %}</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0">Upload &amp; publish</h3>
+  <p class="small">Up to {{ max_files }} photos · {{ max_mb }}MB each</p>
+  <form method="post" action="/ui/saas/app/sell" enctype="multipart/form-data">
+    <input type="hidden" name="action" value="upload_publish">
+    <label class="small">Gallery name
+      <input type="text" name="gallery_name" required placeholder="Smith wedding finals">
+    </label>
+    <label class="small">Photos
+      <input type="file" name="files" accept="image/*" multiple required>
+    </label>
+    <label class="small">Offer label (optional)
+      <input type="text" name="label" placeholder="{{ tenant.name }}">
+    </label>
+    <button type="submit" style="margin-top:1rem">Upload, analyze &amp; publish</button>
+  </form>
+</div>
+
+{% if recent_runs %}
+<div class="card">
+  <h3 style="margin-top:0">Or publish from an existing run</h3>
+  <table>
+    <tr><th>ID</th><th>Gallery</th><th>Bundles</th><th>Est.</th><th></th></tr>
+    {% for r in recent_runs %}
+    <tr>
+      <td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td>
+      <td>{{ r.gallery_name }}</td>
+      <td>{{ r.bundle_count }}</td>
+      <td>{{ r.estimated_total_cents|money }}</td>
+      <td><a href="/ui/saas/app/sell?run_id={{ r.id }}">Review &amp; publish</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endif %}
+
+{% if analyzing_batch_id %}
+<script>
+(function () {
+  const root = document.getElementById('analyze-progress');
+  if (!root) return;
+  const batchId = root.dataset.batchId;
+  const autoPublish = root.dataset.auto === '1';
+  const statusEl = document.getElementById('analyze-status-text');
+  async function poll() {
+    try {
+      const r = await fetch('/upload-batches/' + batchId + '/status', {credentials: 'include'});
+      if (!r.ok) throw new Error('status ' + r.status);
+      const d = await r.json();
+      statusEl.textContent = 'Status: ' + d.status + (d.argus_run_id ? ' · Argus run ' + d.argus_run_id : '');
+      if (d.done && d.run_id) {
+        if (autoPublish) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = '/ui/saas/app/sell';
+          const fields = {action: 'publish_run', run_id: String(d.run_id)};
+          for (const [k, v] of Object.entries(fields)) {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = k;
+            inp.value = v;
+            form.appendChild(inp);
+          }
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        }
+        window.location.href = '/ui/saas/app/sell?run_id=' + d.run_id;
+        return;
+      }
+      if (d.failed) {
+        statusEl.textContent = 'Failed: ' + (d.analyze_error || 'unknown error');
+        return;
+      }
+    } catch (e) {
+      statusEl.textContent = 'Polling… (' + e + ')';
+    }
+    setTimeout(poll, 2000);
+  }
+  poll();
+})();
+</script>
+{% endif %}
+{% endblock %}

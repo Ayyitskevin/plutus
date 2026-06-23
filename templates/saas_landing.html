@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h2 style="margin-top:0">Plutus for photographers</h2>
+  <p>Turn every client gallery into curated print and album bundles — then share a branded storefront link for one-click checkout.</p>
+  <p>
+    {% if signup_enabled %}
+    <a class="btn" href="/ui/saas/signup">Start free trial</a>
+    {% endif %}
+    <a class="btn {% if signup_enabled %}secondary{% endif %}" href="/ui/saas/login">Sign in</a>
+  </p>
+</div>
+<div class="grid-2">
+  <div class="card">
+    <h3 style="margin-top:0">Recommend</h3>
+    <p class="small">Connect Mise galleries and Argus keeper scores to generate upsell bundles with SKU pairings and revenue estimates.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Sell</h3>
+    <p class="small">Share secure offer links with clients. Stripe checkout handles payment; orders land in your dashboard.</p>
+  </div>
+</div>
+{% if billing_enabled %}
+<p class="small">Subscription billing is enabled — <a href="/ui/saas/billing">manage plan</a>.</p>
+{% endif %}
+{% endblock %}

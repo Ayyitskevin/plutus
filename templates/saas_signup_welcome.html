@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card key-banner" style="background:#fff8e6;border:1px solid #e8c96a">
+  <h2 style="margin-top:0">Welcome, {{ tenant.name }}!</h2>
+  <p>Your trial is active. Copy your API key now — it won't be shown again.</p>
+  <code style="word-break:break-all;font-size:.85rem">{{ api_key }}</code>
+</div>
+<div class="card">
+  <p><strong>Storefront:</strong> <a href="{{ store_url }}">{{ store_url }}</a></p>
+  <p class="small">Upload a gallery to get vision-aware print bundles, then share an offer link with clients.</p>
+  <a class="btn" href="/ui/saas/app/upload">Upload your first gallery</a>
+  <a class="btn secondary" href="/ui/saas/app" style="margin-left:.5rem">Dashboard</a>
+</div>
+{% endblock %}

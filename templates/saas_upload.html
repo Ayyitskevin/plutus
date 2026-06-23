@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin-top:0">Upload gallery</h2>
+    <a class="btn secondary" href="/ui/saas/app">← Dashboard</a>
+  </div>
+  <p class="small">
+    Storage: {{ storage.backend }}{% if storage.bucket %} ({{ storage.bucket }}){% endif %}
+    · up to {{ max_files }} files · {{ max_mb }}MB each
+    {% if upload_async %}· async analyze{% endif %}
+  </p>
+  {% if argus and argus.reachable %}
+  <p class="small status-ok">
+    Argus vision: {{ argus.provider or argus.backend }}{% if argus.model %} / {{ argus.model }}{% endif %}
+    {% if argus_auto_vision %}— runs automatically on analyze{% endif %}
+  </p>
+  {% elif argus %}
+  <p class="small err">Argus configured but unreachable — analyze will use mock scoring only.</p>
+  {% else %}
+  <p class="small">Argus not configured — recommendations use filename/heuristic scoring.</p>
+  {% endif %}
+</div>
+
+{% if upload_message %}<p class="status-ok">{{ upload_message }}</p>{% endif %}
+{% if upload_error %}<p class="err">{{ upload_error }}</p>{% endif %}
+{% if request.query_params.get('error') %}<p class="err">{{ request.query_params.get('error') }}</p>{% endif %}
+
+{% if analyzing_batch_id %}
+<div class="card" id="analyze-progress" data-batch-id="{{ analyzing_batch_id }}">
+  <h3 style="margin-top:0">Analyzing gallery…</h3>
+  <p class="small" id="analyze-status-text">Queued — Argus vision and recommendations run in the background.</p>
+  <p class="small" style="color:var(--muted)">You can leave this page; we'll redirect when the run is ready.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/ui/saas/app/upload" enctype="multipart/form-data">
+    <label class="small">Gallery name
+      <input type="text" name="gallery_name" required placeholder="Smith wedding finals">
+    </label>
+    <label class="small">Photos
+      <input type="file" name="files" accept="image/*" multiple required>
+    </label>
+    <details class="small" style="margin-top:.75rem">
+      <summary>Advanced — reuse existing Argus run</summary>
+      <label class="small">Argus run ID (optional override)
+        <input type="number" name="argus_run_id" placeholder="skip auto vision when set">
+      </label>
+    </details>
+    <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+      <button type="submit" name="analyze" value="1">Upload &amp; recommend</button>
+      <button type="submit" class="secondary">Upload only</button>
+    </div>
+  </form>
+</div>
+
+{% if batches %}
+<div class="card">
+  <h3 style="margin-top:0">Recent uploads</h3>
+  <table>
+    <tr><th>Name</th><th>Photos</th><th>Status</th><th>Run</th><th></th></tr>
+    {% for b in batches %}
+    <tr>
+      <td>{{ b.name }}</td>
+      <td>{{ b.photo_count }}</td>
+      <td>
+        <span class="status-badge status-{{ b.status }}">{{ b.status }}</span>
+        {% if b.analyze_error %}<br><span class="err small">{{ b.analyze_error }}</span>{% endif %}
+      </td>
+      <td>{% if b.run_id %}<a href="/runs/{{ b.run_id }}">{{ b.run_id }}</a>{% else %}—{% endif %}</td>
+      <td>
+        {% if b.status == 'ready' %}
+        <form method="post" action="/ui/saas/app/upload/{{ b.id }}/analyze" class="inline-form">
+          <button type="submit" class="secondary">Analyze</button>
+        </form>
+        {% elif b.status == 'failed' %}
+        <form method="post" action="/ui/saas/app/upload/{{ b.id }}/analyze" class="inline-form">
+          <button type="submit" class="secondary">Retry</button>
+        </form>
+        {% elif b.status in ['queued', 'analyzing'] %}
+        <a href="/ui/saas/app/upload?analyzing={{ b.id }}" class="small">progress</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+<style>.inline-form{display:inline}</style>
+{% if analyzing_batch_id %}
+<script>
+(function () {
+  const root = document.getElementById('analyze-progress');
+  if (!root) return;
+  const batchId = root.dataset.batchId;
+  const statusEl = document.getElementById('analyze-status-text');
+  async function poll() {
+    try {
+      const r = await fetch('/upload-batches/' + batchId + '/status', {credentials: 'include'});
+      if (!r.ok) throw new Error('status ' + r.status);
+      const d = await r.json();
+      statusEl.textContent = 'Status: ' + d.status + (d.argus_run_id ? ' · Argus run ' + d.argus_run_id : '');
+      if (d.done && d.run_id) {
+        window.location.href = '/runs/' + d.run_id;
+        return;
+      }
+      if (d.failed) {
+        statusEl.textContent = 'Failed: ' + (d.analyze_error || 'unknown error');
+        return;
+      }
+    } catch (e) {
+      statusEl.textContent = 'Polling… (' + e + ')';
+    }
+    setTimeout(poll, 2000);
+  }
+  poll();
+})();
+</script>
+{% endif %}
+{% endblock %}

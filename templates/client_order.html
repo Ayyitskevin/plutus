@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .status-pill {
+    display: inline-block;
+    padding: .25rem .65rem;
+    border-radius: 999px;
+    font-size: .82rem;
+    font-weight: 600;
+    background: var(--accent-soft);
+  }
+  .status-pill.status-paid { background: #e8f5e9; color: #2e7d32; }
+  .status-pill.status-pending { background: #fff8e6; color: #8a6d00; }
+  .timeline { margin-top: .5rem; }
+  .timeline tr td:first-child { white-space: nowrap; }
+  .small { font-size: .85rem; color: var(--muted); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+
+<div class="card">
+  <h2 style="margin-top:0">Your order{% if tenant %} — {{ tenant.name }}{% endif %}</h2>
+  <p class="small">Order #{{ order.id }}{% if bundle_title %} · {{ bundle_title }}{% endif %}</p>
+  <p style="margin:.75rem 0 0">
+    Payment:
+    <span class="status-pill status-{{ order.status }}">{{ order.status }}</span>
+    {% if order.lab_status %}
+    · Fulfillment: <strong>{{ order.lab_status }}</strong>
+    {% endif %}
+  </p>
+  {% if order.paid_at %}<p class="small">Paid {{ order.paid_at }}</p>{% endif %}
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h3 style="margin-top:0">Package</h3>
+    <table>
+      <tr><th>Item</th><th>Qty</th><th></th></tr>
+      {% for item in order['items'] %}
+      <tr>
+        <td>{{ item.label }}</td>
+        <td>{{ item.quantity }}</td>
+        <td>{{ (item.unit_cents * item.quantity)|money }}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td colspan="2" style="text-align:right"><strong>Total</strong></td>
+        <td><strong>{{ order.total_cents|money }}</strong></td>
+      </tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Fulfillment</h3>
+    {% if order.lab_status %}
+    <p>Status: <strong>{{ order.lab_status }}</strong></p>
+    {% else %}
+    <p class="small">Your order is being prepared. Check back here for production and shipping updates.</p>
+    {% endif %}
+    {% if order.lab_ref %}<p class="small">Reference: {{ order.lab_ref }}</p>{% endif %}
+    {% if fulfillment_events %}
+    <table class="timeline" style="margin-top:.75rem">
+      <tr><th>Time</th><th>Update</th></tr>
+      {% for e in fulfillment_events %}
+      <tr>
+        <td class="small">{{ e.created_at }}</td>
+        <td>{{ e.status }}{% if e.detail %} — <span class="small">{{ e.detail }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <p class="small" style="margin:0">Questions? Contact {% if tenant %}{{ tenant.name }}{% else %}your photographer{% endif %}{% if order.client_email %} — we have {{ order.client_email }} on file{% endif %}.</p>
+</div>
+{% endblock %}

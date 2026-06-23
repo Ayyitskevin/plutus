@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card" style="max-width:520px">
+  <h2 style="margin-top:0">Start your free trial</h2>
+  <p class="small">{{ trial_days }} days · {{ trial_cap }} recommendations · client storefront included</p>
+  {% if signup_error %}<p class="err">{{ signup_error }}</p>{% endif %}
+  <form method="post" action="/ui/saas/signup">
+    <label class="small">Studio name
+      <input type="text" name="studio_name" value="{{ studio_name or '' }}" required placeholder="Acme Photography">
+    </label>
+    <label class="small">Work email
+      <input type="email" name="email" value="{{ email or '' }}" required placeholder="you@studio.com">
+    </label>
+    <label class="small">Store URL slug (optional)
+      <input type="text" name="store_slug" value="{{ store_slug or '' }}" placeholder="acme-photo">
+    </label>
+    <p class="small" style="margin:.5rem 0 1rem">Your storefront will be at <code>/store/your-slug</code></p>
+    <button type="submit">Create account</button>
+  </form>
+  <p class="small" style="margin-top:1rem">Already have a key? <a href="/ui/saas/login">Sign in</a></p>
+</div>
+{% endblock %}

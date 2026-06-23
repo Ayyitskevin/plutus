@@ -3,28 +3,30 @@
 AI print & album sales upsell layer for photo galleries.
 
 Plutus turns a delivered gallery (plus optional [Argus](https://github.com/Ayyitskevin/argus)
-keeper/hero signals) into client-ready print bundles — canvas, fine art prints, albums,
-and gift sets with SKU pairings and price estimates.
+vision signals) into client-ready print bundles — canvas, fine art prints, albums,
+and gift sets with SKU pairings and price estimates. SaaS tenants get a branded
+storefront, Stripe checkout, and lab order handoff.
 
 Part of the Kevin Lee photography suite alongside [mise](https://github.com/Ayyitskevin/mise),
 [argus](https://github.com/Ayyitskevin/argus), [mnemosyne](https://github.com/Ayyitskevin/mnemosyne),
 and [dionysus](https://github.com/Ayyitskevin/dionysus).
 
-## Phase 0–1 (current)
+## What's built (Phases 0–7)
 
-- Analyze a local gallery folder → upsell bundle recommendations
-- **`POST /recommend/mise-gallery`** — Mise integration (auto after Argus callback)
-- Optional Argus run id to enrich with culling scores
-- Web review UI + JSON export + **client pitch** (`/runs/{id}/pitch.txt`)
-- Mock engine (no checkout, no lab APIs yet)
+| Mode | Port | Highlights |
+|------|------|------------|
+| **Homelab** | `8030` | Folder analyze, Mise gallery hook, mock/vision recommend, pitch export |
+| **SaaS** | `8031` | Multi-tenant auth, self-signup + trial, uploads (local/S3), async Argus vision, share links, Stripe checkout, lab mock/WHCC stub |
 
-## Quickstart
+**SaaS flow:** signup → upload gallery → Argus auto-vision (background) → vision-aware bundles → share offer link → client Stripe checkout → order + lab poll.
+
+## Quickstart — homelab
 
 ```bash
 cd ~/ai-workspace/plutus
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-cp .env.example .env
+cp .env.homelab.example .env
 
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8030
 ```
@@ -36,24 +38,65 @@ curl -s -X POST http://127.0.0.1:8030/analyze-folder \
   -d "folder=/path/to/gallery&name=Demo&limit=20"
 ```
 
-With Argus signals (homelab):
+## Quickstart — SaaS
 
 ```bash
-# .env: PLUTUS_ARGUS_URL=http://strix-halo-a9-mega:8010
-#       PLUTUS_ARGUS_TOKEN=<shared bearer>
-curl -s -X POST http://127.0.0.1:8030/analyze-folder \
-  -d "folder=/path/to/gallery&argus_run_id=199"
+cd ~/ai-workspace/plutus
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+cp .env.saas.example .env
+# Edit: PLUTUS_API_TOKEN, PLUTUS_TENANT_KEY_PEPPER, PLUTUS_ARGUS_* , STRIPE_*
+
+bash scripts/start-plutus-saas.sh
+```
+
+Open http://127.0.0.1:8031 — sign up for a trial, upload a gallery, create a share link.
+
+**Production service (user systemd):**
+
+```bash
+bash scripts/install-saas-service.sh
+journalctl --user -u plutus-saas -f
+```
+
+## Key API routes
+
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `POST /analyze-folder` | — | Homelab folder → bundles |
+| `POST /recommend/mise-gallery` | Bearer | Mise publish hook |
+| `POST /recommend/upload-batch` | Bearer | Tenant upload → analyze (202 async) |
+| `GET /upload-batches/{id}/status` | Bearer | Poll async analyze |
+| `POST /storefront/share-links` | Bearer | Client offer URL |
+| `POST /store/{slug}/offer/{token}/checkout` | — | Stripe client checkout |
+| `POST /webhooks/stripe` | Stripe sig | Payment → order |
+| `GET /healthz` | — | DB, Argus, Stripe, storage, lab checks |
+
+Tenant auth: `Authorization: Bearer plutus_tk_<tenant>_<token>`
+
+## Dogfood scripts
+
+```bash
+bash scripts/dogfood-phase5.sh      # upload → Argus grok → recommend
+bash scripts/dogfood-phase6.sh      # share → simulate pay → lab
+bash scripts/dogfood-stripe-real.sh # real Stripe checkout + signed webhook
+bash scripts/stripe-listen.sh       # forward webhooks locally (needs Stripe CLI)
 ```
 
 ## Configuration
 
+See `.env.homelab.example` (homelab) and `.env.saas.example` (cloud). Common variables:
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PLUTUS_HOST` | `0.0.0.0` | Bind host |
-| `PLUTUS_PORT` | `8030` | Bind port |
-| `PLUTUS_DATA_DIR` | `./data` | SQLite + local data |
-| `PLUTUS_ARGUS_URL` | — | Argus base URL for export merge |
-| `PLUTUS_ARGUS_TOKEN` | — | Bearer for Argus export |
+| `PLUTUS_SAAS_MODE` | `false` | Enable multi-tenant SaaS |
+| `PLUTUS_PORT` | `8030` / `8031` | Bind port |
+| `PLUTUS_DATA_DIR` | `./data` | SQLite + uploads |
+| `PLUTUS_ARGUS_URL` | — | Argus base URL |
+| `PLUTUS_ARGUS_AUTO_VISION` | `false` | Auto-run vision on upload analyze |
+| `PLUTUS_UPLOAD_ASYNC_ANALYZE` | `true` | Background upload worker |
+| `STRIPE_SECRET_KEY` | — | Tenant billing + client checkout |
+| `STRIPE_WEBHOOK_SECRET` | — | Signed webhook verification |
 
 ## Tests
 
@@ -65,4 +108,4 @@ curl -s -X POST http://127.0.0.1:8030/analyze-folder \
 ## Docs
 
 - [docs/PHASE-0.md](docs/PHASE-0.md) — scope and magic moment
-- [docs/architecture.md](docs/architecture.md) — module map and roadmap
+- [docs/architecture.md](docs/architecture.md) — module map and data flow

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Order #{{ order.id }}</h2>
+    <a class="btn secondary" href="{% if homelab_store %}/runs/{{ order.run_id }}{% elif is_admin %}/ui/saas/app/admin{% else %}/ui/saas/app{% endif %}">← Back</a>
+  </div>
+  <p class="small">
+    {% if tenant %}{{ tenant.name }} · {% endif %}
+    Status <strong>{{ order.status }}</strong>
+    {% if order.paid_at %} · paid {{ order.paid_at }}{% endif %}
+  </p>
+  {% if order.client_token and order.status == 'paid' %}
+  <p class="small" style="margin-top:.5rem">
+    Client track link:
+    <a href="{{ public_base }}/store/order/track/{{ order.client_token }}">{{ public_base }}/store/order/track/{{ order.client_token }}</a>
+  </p>
+  {% endif %}
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h3 style="margin-top:0">Client</h3>
+    <p>{{ order.client_name or '—' }}</p>
+    <p class="small">{{ order.client_email or 'no email' }}</p>
+  </div>
+<div class="card">
+  <h3 style="margin-top:0">Fulfillment</h3>
+  <p>Lab: <strong>{{ order.lab_status or 'pending' }}</strong></p>
+  <p class="small">Ref: {{ order.lab_ref or '—' }}</p>
+  <p class="small">Run <a href="/runs/{{ order.run_id }}">#{{ order.run_id }}</a> · bundle {{ order.bundle_index }}</p>
+  {% if fulfillment_events %}
+  <table style="margin-top:.75rem">
+    <tr><th>Time</th><th>Status</th><th>Detail</th></tr>
+    {% for e in fulfillment_events %}
+    <tr>
+      <td class="small">{{ e.created_at }}</td>
+      <td>{{ e.status }}</td>
+      <td class="small">{{ e.detail or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Line items</h3>
+  <table>
+    <tr><th>SKU</th><th>Label</th><th>Qty</th><th>Unit</th><th>Line</th></tr>
+    {% for item in order['items'] %}
+    <tr>
+      <td class="small"><code>{{ item.sku }}</code></td>
+      <td>{{ item.label }}</td>
+      <td>{{ item.quantity }}</td>
+      <td>{{ item.unit_cents|money }}</td>
+      <td>{{ (item.unit_cents * item.quantity)|money }}</td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="4" style="text-align:right"><strong>Total</strong></td>
+      <td><strong>{{ order.total_cents|money }}</strong></td>
+    </tr>
+  </table>
+</div>
+
+{% if run %}
+<div class="card">
+  <h3 style="margin-top:0">Gallery context</h3>
+  <p class="small">{{ run.bundle_count }} bundles · est. {{ run.estimated_total_cents|money }} · engine {{ run.engine }}</p>
+</div>
+{% endif %}
+{% endblock %}

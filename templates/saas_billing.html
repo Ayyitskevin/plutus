@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h2 style="margin-top:0">Billing</h2>
+  {% if billing_success %}<p class="status-ok">Subscription activated — thank you!</p>{% endif %}
+  {% if billing_cancelled %}<p class="small">Checkout cancelled.</p>{% endif %}
+  {% if billing_error %}<p class="err">{{ billing_error }}</p>{% endif %}
+  {% if tenant %}
+  <p>Tenant <strong>{{ tenant.name }}</strong> · status {{ tenant.billing_status or 'not linked' }} · plan {{ tenant.plan_tier or 'trial' }}</p>
+  {% endif %}
+  {% if billing_enabled %}
+  <form method="post" action="/ui/saas/billing/checkout" style="display:inline"><button type="submit">Subscribe</button></form>
+  <form method="post" action="/ui/saas/billing/portal" style="display:inline;margin-left:.5rem"><button type="submit" class="secondary">Manage subscription</button></form>
+  {% else %}
+  <p class="small">Stripe is not configured on this host.</p>
+  {% endif %}
+  <p style="margin-top:1rem"><a href="/ui/saas/app">← Dashboard</a></p>
+</div>
+{% endblock %}

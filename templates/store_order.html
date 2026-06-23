@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  {% if success %}
+  <h2 style="margin-top:0;color:var(--accent)">Thank you!</h2>
+  <p>Your order{% if order %} #{{ order.id }}{% endif %} is confirmed.</p>
+  {% if order %}
+  <p class="small">Total: {{ order.total_cents|money }}</p>
+  {% if order.lab_status %}
+  <p class="small">Fulfillment: <strong>{{ order.lab_status }}</strong>{% if order.lab_ref %} · ref {{ order.lab_ref }}{% endif %}</p>
+  {% endif %}
+  {% endif %}
+  {% if client_track_url %}
+  <div style="margin-top:1rem;padding:.85rem 1rem;background:#f6f8fa;border-radius:8px;border:1px solid #dde3ea">
+    <p class="small" style="margin:0 0 .5rem"><strong>Track your order</strong> — bookmark this link for production and shipping updates:</p>
+    <a href="{{ client_track_url }}">{{ client_track_url }}</a>
+  </div>
+  {% endif %}
+  <p class="small" style="margin-top:1rem">Your photographer will follow up with production and shipping details.</p>
+  {% else %}
+  <h2 style="margin-top:0">Checkout cancelled</h2>
+  <p>No charge was made. You can return to your offer link to try again.</p>
+  {% endif %}
+</div>
+
+{% if success and fulfillment_events %}
+<div class="card">
+  <h3 style="margin-top:0">Order timeline</h3>
+  <table>
+    <tr><th>Time</th><th>Status</th><th>Detail</th></tr>
+    {% for e in fulfillment_events %}
+    <tr>
+      <td class="small">{{ e.created_at }}</td>
+      <td>{{ e.status }}</td>
+      <td class="small">{{ e.detail or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

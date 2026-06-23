@@ -4,8 +4,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .env
-data/*.db
-data/*.db-*
+.env.homelab
+data/
+!data/.gitkeep
 *.egg-info/
 dist/
 build/
+data-homelab/

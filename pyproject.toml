@@ -24,6 +24,9 @@ dev = [
   "pytest>=8.2,<9.0",
   "ruff>=0.6,<1.0",
 ]
+s3 = [
+  "boto3>=1.35,<2.0",
+]
 
 [project.scripts]
 plutus-api = "app.main:main"
@@ -40,3 +43,4 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]

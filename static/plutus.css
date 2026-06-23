@@ -46,6 +46,12 @@ button, .btn {
   cursor: pointer;
   text-decoration: none;
 }
+button.secondary, .btn.secondary {
+  background: #e8e4dc;
+  color: var(--ink);
+}
+.small { font-size: .85rem; color: var(--muted); }
+.status-ok { color: var(--accent); }
 .bundle { border-left: 4px solid var(--gold); padding-left: .9rem; }
 .bundle h3 { margin: 0 0 .35rem; font-size: 1.05rem; }
 .bundle .pitch { color: var(--muted); margin: 0 0 .75rem; }
@@ -69,6 +75,21 @@ button, .btn {
   margin-right: .35rem;
 }
 .err { color: #a11; margin-bottom: 1rem; }
+.tag-vision { background: #e3edf8; color: #1a4a7a; }
+.tag-theme { background: #f5efe0; color: var(--gold); }
+.status-badge {
+  display: inline-block;
+  font-size: .75rem;
+  padding: .12rem .45rem;
+  border-radius: 4px;
+  text-transform: capitalize;
+  background: #eee;
+  color: var(--ink);
+}
+.status-queued, .status-analyzing { background: #fff3cd; color: #856404; }
+.status-analyzed, .status-vision { background: var(--accent-soft); color: var(--accent); }
+.status-failed { background: #fde8e8; color: #a11; }
+.status-ready, .status-mock { background: #eee; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; font-size: .92rem; }
 th, td { text-align: left; padding: .45rem .35rem; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 600; }

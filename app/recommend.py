@@ -1,38 +1,114 @@
-"""Mock recommendation engine — maps gallery photos to print/album bundles."""
+"""Recommendation engine — vision-aware bundle builder."""
 from __future__ import annotations
 
 from typing import Any
 
+from . import catalog
 from .catalog import PRODUCTS, Product
 
 Photo = dict[str, Any]
+
+DETAIL_SHOT_TYPES = frozenset(
+    {"detail", "macro", "ingredient", "close_up", "closeup", "texture", "flat_lay"}
+)
+HERO_SHOT_TYPES = frozenset(
+    {"hero_plate", "hero", "establishing", "signature", "environment", "wide"}
+)
+PORTRAIT_SHOT_TYPES = frozenset(
+    {"portrait", "headshot", "couple", "group", "family", "candid"}
+)
+FOOD_KEYWORDS = frozenset(
+    {"food", "appetizer", "dish", "plating", "restaurant", "dessert", "cocktail", "menu"}
+)
+WEDDING_KEYWORDS = frozenset(
+    {"wedding", "bride", "groom", "ceremony", "reception", "engagement", "elopement"}
+)
+
+
+def _normalized_shot(photo: Photo) -> str:
+    return (photo.get("shot_type") or "").lower().replace("-", "_").strip()
+
+
+def _keyword_set(photo: Photo) -> set[str]:
+    return {(k or "").lower() for k in (photo.get("keywords") or []) if k}
+
+
+def _has_vision_signals(photos: list[Photo]) -> bool:
+    return any(
+        p.get("keeper_score") is not None
+        or p.get("hero_potential") is not None
+        or p.get("shot_type")
+        or p.get("keywords")
+        for p in photos
+    )
 
 
 def _score(photo: Photo) -> float:
     keeper = float(photo.get("keeper_score") or 0.72)
     hero = float(photo.get("hero_potential") or 0.5)
     orient_bonus = 0.05 if photo.get("orientation") == "landscape" else 0.0
-    return min(1.0, keeper * 0.7 + hero * 0.25 + orient_bonus)
+    shot = _normalized_shot(photo)
+    shot_bonus = 0.0
+    if shot in HERO_SHOT_TYPES:
+        shot_bonus = 0.08
+    elif shot in DETAIL_SHOT_TYPES:
+        shot_bonus = 0.03
+    return min(1.0, keeper * 0.7 + hero * 0.25 + orient_bonus + shot_bonus)
 
 
 def _pick_top(photos: list[Photo], n: int) -> list[Photo]:
-    ranked = sorted(photos, key=_score, reverse=True)
-    return ranked[:n]
+    return sorted(photos, key=_score, reverse=True)[:n]
 
 
-def _line_item(product: Product, photo: Photo, *, qty: int = 1) -> dict[str, Any]:
+def _is_detail(photo: Photo) -> bool:
+    if _normalized_shot(photo) in DETAIL_SHOT_TYPES:
+        return True
+    kws = _keyword_set(photo)
+    return bool(kws & {"detail", "macro", "ingredient", "texture", "closeup", "flat_lay"})
+
+
+def _is_hero_candidate(photo: Photo) -> bool:
+    if _normalized_shot(photo) in HERO_SHOT_TYPES:
+        return True
+    return float(photo.get("hero_potential") or 0) >= 0.75
+
+
+def _gallery_theme(photos: list[Photo]) -> str:
+    all_kws: set[str] = set()
+    for photo in photos:
+        all_kws |= _keyword_set(photo)
+    if all_kws & WEDDING_KEYWORDS:
+        return "wedding"
+    if all_kws & FOOD_KEYWORDS:
+        return "food"
+    return "general"
+
+
+def _line_item(
+    product: Product,
+    photo: Photo,
+    *,
+    qty: int = 1,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    if tenant_id and not catalog.is_active(product.sku, tenant_id):
+        return {}
+    unit_cents = catalog.unit_cents_for(product.sku, tenant_id)
+    label = catalog.label_for(product.sku, tenant_id)
     return {
         "sku": product.sku,
-        "label": product.label,
+        "label": label,
         "size": product.size,
-        "unit_cents": product.unit_cents,
+        "unit_cents": unit_cents,
         "qty": qty,
-        "line_cents": product.unit_cents * qty,
+        "line_cents": unit_cents * qty,
         "photo": {
             "filename": photo["filename"],
             "path": photo.get("path"),
             "keeper_score": photo.get("keeper_score"),
             "hero_potential": photo.get("hero_potential"),
+            "shot_type": photo.get("shot_type"),
+            "keywords": list(photo.get("keywords") or [])[:5],
         },
         "rationale": _rationale(product, photo),
     }
@@ -40,57 +116,116 @@ def _line_item(product: Product, photo: Photo, *, qty: int = 1) -> dict[str, Any
 
 def _rationale(product: Product, photo: Photo) -> str:
     bits = []
-    if photo.get("keeper_score"):
+    if photo.get("keeper_score") is not None:
         bits.append(f"keeper {float(photo['keeper_score']):.0%}")
-    if photo.get("hero_potential"):
+    if photo.get("hero_potential") is not None:
         bits.append(f"hero {float(photo['hero_potential']):.0%}")
-    if photo.get("shot_type"):
-        bits.append(str(photo["shot_type"]).replace("_", " "))
-    detail = ", ".join(bits) if bits else "strong composition for wall display"
+    shot = _normalized_shot(photo)
+    if shot:
+        bits.append(shot.replace("_", " "))
+    kws = [k for k in (photo.get("keywords") or [])[:3] if k]
+    if kws:
+        bits.append(", ".join(kws))
+    detail = " · ".join(bits) if bits else "strong composition for wall display"
     return f"{product.label} {product.size} — {detail}"
 
 
-def recommend_bundles(photos: list[Photo]) -> dict[str, Any]:
+def _pick_hero(photos: list[Photo]) -> Photo:
+    heroes = [p for p in photos if _is_hero_candidate(p)]
+    if heroes:
+        return _pick_top(heroes, 1)[0]
+    return _pick_top(photos, 1)[0]
+
+
+def _pick_canvas_product(hero: Photo) -> Product:
+    hero_score = float(hero.get("hero_potential") or 0)
+    if hero_score >= 0.88 and hero.get("orientation") == "landscape":
+        return next(p for p in PRODUCTS if p.sku == "canvas-24x36")
+    return next(p for p in PRODUCTS if p.sku == "canvas-16x20")
+
+
+def _wall_pitch(theme: str, hero: Photo) -> str:
+    shot = _normalized_shot(hero).replace("_", " ")
+    if theme == "food":
+        return (
+            f"Lead with this {shot or 'hero'} frame — "
+            "perfect for restaurant or kitchen wall art."
+        )
+    if theme == "wedding":
+        return (
+            "Statement piece from your strongest keeper — "
+            "ideal for the couple's home or parents' gift."
+        )
+    return "Lead with your strongest hero — ideal for dining room or lobby."
+
+
+def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> dict[str, Any]:
     """Return client-ready upsell bundles for a gallery."""
     if not photos:
-        return {"bundles": [], "estimated_total_cents": 0, "photo_count": 0}
+        return {"bundles": [], "estimated_total_cents": 0, "photo_count": 0, "engine": "mock"}
 
+    theme = _gallery_theme(photos)
+    vision = _has_vision_signals(photos)
     top = _pick_top(photos, min(12, len(photos)))
-    hero = top[0]
+    hero = _pick_hero(photos)
     runners = top[1:4]
-    detail_shots = [
-        p for p in photos
-        if (p.get("shot_type") or "").lower() in {"detail", "macro", "ingredient"}
-        or (p.get("orientation") == "square" and _score(p) >= 0.65)
-    ][:3]
+
+    detail_shots = [p for p in photos if _is_detail(p)]
+    if not detail_shots and vision:
+        detail_shots = [
+            p for p in photos
+            if (p.get("orientation") == "square" and _score(p) >= 0.65)
+        ][:3]
 
     bundles: list[dict[str, Any]] = []
 
-    canvas = next(p for p in PRODUCTS if p.sku == "canvas-16x20")
+    canvas = _pick_canvas_product(hero)
     bundles.append({
         "id": "wall-hero",
         "title": "Statement wall piece",
-        "pitch": "Lead with your strongest hero — ideal for dining room or lobby.",
-        "items": [_line_item(canvas, hero)],
+        "pitch": _wall_pitch(theme, hero),
+        "items": [_line_item(canvas, hero, tenant_id=tenant_id)],
     })
 
     print_large = next(p for p in PRODUCTS if p.sku == "print-16x20")
+    editor_picks = top[:3]
+    if theme == "wedding":
+        portraits = [p for p in photos if _normalized_shot(p) in PORTRAIT_SHOT_TYPES]
+        if len(portraits) >= 2:
+            editor_picks = _pick_top(portraits, 3)
     bundles.append({
         "id": "editor-picks",
         "title": "Editor's pick trio",
         "pitch": "Three large fine-art prints from your highest-scoring frames.",
-        "items": [_line_item(print_large, p) for p in top[:3]],
+        "items": [_line_item(print_large, p, tenant_id=tenant_id) for p in editor_picks],
     })
 
     gift = next(p for p in PRODUCTS if p.sku == "gift-trio-8x10")
-    gift_photos = detail_shots or runners[:3] or top[:3]
+    gift_photos = detail_shots[:3] or runners[:3] or top[:3]
+    gift_pitch = (
+        "Detail and tabletop frames clients love for gifts and secondary spaces."
+        if detail_shots
+        else "Smaller prints clients love for gifts and secondary spaces."
+    )
     bundles.append({
         "id": "gift-trio",
         "title": "Giftable tabletop set",
-        "pitch": "Smaller prints clients love for gifts and secondary spaces.",
-        "items": [_line_item(gift, gift_photos[0], qty=1)] if gift_photos else [],
+        "pitch": gift_pitch,
+        "items": [_line_item(gift, gift_photos[0], qty=1, tenant_id=tenant_id)]
+        if gift_photos
+        else [],
         "photo_slots": [p["filename"] for p in gift_photos[:3]],
     })
+
+    if theme == "food":
+        metal = next(p for p in PRODUCTS if p.sku == "metal-11x14")
+        metal_photo = detail_shots[0] if detail_shots else hero
+        bundles.append({
+            "id": "metal-accent",
+            "title": "Metal kitchen accent",
+            "pitch": "Vivid metal print for chef's table, bar, or menu wall.",
+            "items": [_line_item(metal, metal_photo, tenant_id=tenant_id)],
+        })
 
     keepers = [p for p in photos if _score(p) >= 0.68]
     if len(keepers) >= 12:
@@ -98,13 +233,22 @@ def recommend_bundles(photos: list[Photo]) -> dict[str, Any]:
             p for p in PRODUCTS
             if p.sku == ("album-30" if len(keepers) >= 24 else "album-20")
         )
+        album_pitch = {
+            "wedding": f"{len(keepers)} keepers — signature album for the couple's story.",
+            "food": f"{len(keepers)} strong frames — premium menu or brand lookbook album.",
+        }.get(theme, f"{len(keepers)} keepers — strong candidate for a premium album upsell.")
         bundles.append({
             "id": "signature-album",
             "title": "Signature layflat album",
-            "pitch": f"{len(keepers)} keepers — strong candidate for a premium album upsell.",
-            "items": [_line_item(album, keepers[0])],
+            "pitch": album_pitch,
+            "items": [_line_item(album, _pick_top(keepers, 1)[0], tenant_id=tenant_id)],
             "photo_slots": [p["filename"] for p in _pick_top(keepers, 30)],
         })
+
+    for bundle in bundles:
+        bundle["items"] = [item for item in bundle.get("items") or [] if item]
+
+    bundles = [b for b in bundles if b.get("items")]
 
     total = sum(
         item["line_cents"]
@@ -113,12 +257,17 @@ def recommend_bundles(photos: list[Photo]) -> dict[str, Any]:
     )
 
     return {
-        "engine": "mock",
+        "engine": "vision" if vision else "mock",
+        "gallery_theme": theme,
         "photo_count": len(photos),
         "bundles": bundles,
         "estimated_total_cents": total,
         "top_photos": [
-            {"filename": p["filename"], "score": round(_score(p), 3)}
+            {
+                "filename": p["filename"],
+                "score": round(_score(p), 3),
+                "shot_type": p.get("shot_type"),
+            }
             for p in top[:6]
         ],
     }

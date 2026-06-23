@@ -1,0 +1,14 @@
+[Unit]
+Description=Plutus SaaS print upsell API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ai-workspace/plutus
+EnvironmentFile=%h/ai-workspace/plutus/.env
+ExecStart=%h/ai-workspace/plutus/scripts/start-plutus-saas.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

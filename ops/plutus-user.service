@@ -1,0 +1,14 @@
+[Unit]
+Description=Plutus print upsell API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ai-workspace/plutus
+EnvironmentFile=%h/ai-workspace/plutus/.env
+ExecStart=%h/ai-workspace/plutus/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8030
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
