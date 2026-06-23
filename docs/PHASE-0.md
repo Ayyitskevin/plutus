@@ -17,6 +17,13 @@ logic feels worth sending before we wire Stripe, WHCC/Millers APIs, or gallery i
 - FastAPI + Jinja UI: analyze form, bundle review, JSON export.
 - `POST /analyze-folder` for scripting.
 
+## Phase 1 (shipped)
+
+- `POST /recommend/mise-gallery` — Mise POSTs `mise_gallery_id` after Argus analyze
+- `PLUTUS_MISE_MEDIA_ROOT` + `scripts/sync-mise-media.sh` for homelab media
+- Client pitch export (`/runs/{id}/pitch.txt`) for copy-paste emails
+- Mise admin tile: Plutus status, bundle link, pitch link
+
 ## OUT
 
 - Stripe checkout / payment capture.

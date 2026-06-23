@@ -49,16 +49,30 @@ def connection() -> Iterator[sqlite3.Connection]:
         con.close()
 
 
+_GALLERY_COLS = ("mise_gallery_id",)
+
+
 def migrate() -> None:
     with connection() as con:
         con.executescript(_SCHEMA)
+        existing = {r[1] for r in con.execute("PRAGMA table_info(galleries)")}
+        for col in _GALLERY_COLS:
+            if col not in existing:
+                con.execute(f"ALTER TABLE galleries ADD COLUMN {col} INTEGER")
 
 
-def insert_gallery(*, name: str, source: str | None, photo_count: int) -> int:
+def insert_gallery(
+    *,
+    name: str,
+    source: str | None,
+    photo_count: int,
+    mise_gallery_id: int | None = None,
+) -> int:
     with connection() as con:
         cur = con.execute(
-            "INSERT INTO galleries (name, source, photo_count) VALUES (?,?,?)",
-            (name, source, photo_count),
+            """INSERT INTO galleries (name, source, photo_count, mise_gallery_id)
+               VALUES (?,?,?,?)""",
+            (name, source, photo_count, mise_gallery_id),
         )
         return int(cur.lastrowid)
 
@@ -97,6 +111,14 @@ def get_run(run_id: int) -> dict[str, Any] | None:
     out = dict(row)
     out["payload"] = json.loads(out.pop("payload_json"))
     return out
+
+
+def get_gallery_name(gallery_id: int) -> str | None:
+    with connection() as con:
+        row = con.execute(
+            "SELECT name FROM galleries WHERE id=?", (gallery_id,)
+        ).fetchone()
+    return row["name"] if row else None
 
 
 def list_runs(limit: int = 20) -> list[dict[str, Any]]:

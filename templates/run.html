@@ -36,7 +36,14 @@
   {% endfor %}
   <p style="margin:1rem 0 0">
     <a class="btn" href="/runs/{{ run.id }}/json">JSON export</a>
+    <a class="btn" href="/runs/{{ run.id }}/pitch.txt" style="margin-left:.5rem">Pitch text</a>
     <a class="btn" href="/" style="background:var(--muted);margin-left:.5rem">New run</a>
   </p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Client pitch (copy-paste)</h3>
+  <textarea id="pitch-text" rows="14" style="width:100%;font:inherit;padding:.65rem;border:1px solid var(--line);border-radius:6px">{{ pitch_text }}</textarea>
+  <p style="margin:.75rem 0 0"><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('pitch-text').value)">Copy to clipboard</button></p>
 </div>
 {% endblock %}

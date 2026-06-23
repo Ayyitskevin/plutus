@@ -10,11 +10,12 @@ Part of the Kevin Lee photography suite alongside [mise](https://github.com/Ayyi
 [argus](https://github.com/Ayyitskevin/argus), [mnemosyne](https://github.com/Ayyitskevin/mnemosyne),
 and [dionysus](https://github.com/Ayyitskevin/dionysus).
 
-## Phase 0 (current)
+## Phase 0–1 (current)
 
 - Analyze a local gallery folder → upsell bundle recommendations
+- **`POST /recommend/mise-gallery`** — Mise integration (auto after Argus callback)
 - Optional Argus run id to enrich with culling scores
-- Web review UI + JSON export
+- Web review UI + JSON export + **client pitch** (`/runs/{id}/pitch.txt`)
 - Mock engine (no checkout, no lab APIs yet)
 
 ## Quickstart

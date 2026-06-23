@@ -5,12 +5,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import config, db, service
+from . import auth, config, db, pitch, service
 
 _ROOT = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(_ROOT / "templates"))
@@ -35,7 +35,32 @@ app.mount("/static", StaticFiles(directory=str(_ROOT / "static")), name="static"
 
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"status": "ok", "service": "plutus", "engine": "mock"}
+    from . import mise_client
+
+    return {
+        "status": "ok",
+        "service": "plutus",
+        "engine": "mock",
+        "mise_configured": mise_client.is_enabled(),
+        "auth_enabled": bool(config.API_TOKEN),
+    }
+
+
+@app.post("/recommend/mise-gallery", dependencies=[Depends(auth.require_token)])
+def recommend_mise_gallery_api(
+    mise_gallery_id: int = Form(...),
+    limit: int | None = Form(None),
+    argus_run_id: int | None = Form(None),
+) -> JSONResponse:
+    try:
+        result = service.analyze_mise_gallery(
+            mise_gallery_id, limit=limit, argus_run_id=argus_run_id
+        )
+    except service.RecommendError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return JSONResponse(result)
 
 
 @app.post("/analyze-folder")
@@ -92,6 +117,13 @@ def view_run(request: Request, run_id: int):
     if not row:
         return HTMLResponse("Run not found", status_code=404)
     payload = row["payload"]
+    gallery_name = db.get_gallery_name(row["gallery_id"]) or f"Run {run_id}"
+    pitch_text = pitch.render_pitch(
+        gallery_name=gallery_name,
+        bundles=payload.get("bundles") or [],
+        estimated_total_cents=int(payload.get("estimated_total_cents") or 0),
+        photo_count=int(payload.get("photo_count") or 0),
+    )
     return templates.TemplateResponse(
         request,
         "run.html",
@@ -101,6 +133,7 @@ def view_run(request: Request, run_id: int):
             "top_photos": payload.get("top_photos") or [],
             "photo_count": payload.get("photo_count", 0),
             "estimated_total_cents": payload.get("estimated_total_cents", 0),
+            "pitch_text": pitch_text,
             "title": f"run {run_id}",
         },
     )
@@ -112,6 +145,21 @@ def run_json(run_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="run not found")
     return row
+
+
+@app.get("/runs/{run_id}/pitch.txt", response_class=PlainTextResponse)
+def run_pitch(run_id: int):
+    row = db.get_run(run_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="run not found")
+    payload = row["payload"]
+    gallery_name = db.get_gallery_name(row["gallery_id"]) or f"Run {run_id}"
+    return pitch.render_pitch(
+        gallery_name=gallery_name,
+        bundles=payload.get("bundles") or [],
+        estimated_total_cents=int(payload.get("estimated_total_cents") or 0),
+        photo_count=int(payload.get("photo_count") or 0),
+    )
 
 
 def main() -> None:

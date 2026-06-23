@@ -18,4 +18,15 @@ PORT = int(os.environ.get("PLUTUS_PORT", "8030"))
 ARGUS_URL = os.environ.get("PLUTUS_ARGUS_URL", "").rstrip("/")
 ARGUS_TOKEN = os.environ.get("PLUTUS_ARGUS_TOKEN", "")
 
+API_TOKEN = os.environ.get("PLUTUS_API_TOKEN", "")
+
+MISE_URL = os.environ.get("PLUTUS_MISE_URL", "").rstrip("/")
+MISE_API_TOKEN = os.environ.get("PLUTUS_MISE_API_TOKEN", "")
+MISE_TIMEOUT = int(os.environ.get("PLUTUS_MISE_TIMEOUT", "10"))
+MISE_MEDIA_ROOT = (
+    Path(os.environ.get("PLUTUS_MISE_MEDIA_ROOT", ""))
+    if os.environ.get("PLUTUS_MISE_MEDIA_ROOT")
+    else None
+)
+
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
