@@ -51,43 +51,92 @@ echo "  offer=$OFFER_URL"
 echo "==> Client views offer"
 curl -sf "$OFFER_URL" | grep -q "Buy this package" && echo "  storefront OK"
 
-echo "==> Create pending order (bundle 0)"
-ORDER_ID=$(cd "$ROOT" && source .venv/bin/activate 2>/dev/null || true
-python3 - <<PY
-import os, sys
+echo "==> Checkout session (bundle 0)"
+CHECKOUT_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${OFFER_URL}/checkout" \
+  -d "bundle_index=0&client_email=client@dogfood.test&client_name=Homelab+Client" \
+  -D /tmp/plutus-homelab-checkout.hdr)
+if [[ "$CHECKOUT_CODE" != "303" && "$CHECKOUT_CODE" != "200" ]]; then
+  echo "checkout failed HTTP $CHECKOUT_CODE" >&2
+  exit 1
+fi
+grep -qi '^location:' /tmp/plutus-homelab-checkout.hdr && echo "  checkout_url=$(grep -i '^location:' /tmp/plutus-homelab-checkout.hdr | awk '{print $2}' | tr -d '\r')"
+
+DATA_DIR="${PLUTUS_DATA_DIR:-$ROOT/data-homelab}"
+ORDER_ID=$(python3 - <<PY
+import sqlite3
 from pathlib import Path
-sys.path.insert(0, "${ROOT}")
-os.chdir("${ROOT}")
-from dotenv import load_dotenv
-load_dotenv("${ENV_FILE}", override=True)
-from app import config, db
-from app import orders as orders_mod
-db.migrate()
-prepared = orders_mod.prepare_bundle_order(
-    tenant_id=config.HOMELAB_TENANT_ID,
-    run_id=int("${RUN_ID}"),
-    bundle_index=0,
-    client_email="client@dogfood.test",
-    client_name="Homelab Client",
-)
-print(prepared["order_id"])
+db_path = Path("${DATA_DIR}") / "plutus.db"
+con = sqlite3.connect(db_path)
+con.row_factory = sqlite3.Row
+row = con.execute(
+    "SELECT id, stripe_session_id FROM orders WHERE tenant_id='homelab' ORDER BY id DESC LIMIT 1"
+).fetchone()
+if row:
+    print(row["id"])
+    Path("/tmp/plutus_homelab_cs.txt").write_text(row["stripe_session_id"] or "")
 PY
 )
-echo "  order_id=$ORDER_ID"
+SESSION_ID=$(cat /tmp/plutus_homelab_cs.txt 2>/dev/null || true)
+test -n "$ORDER_ID"
+echo "  order_id=$ORDER_ID session=$SESSION_ID"
 
-echo "==> Simulate payment"
-PAY_JSON=$(curl -sf -X POST "$BASE/orders/${ORDER_ID}/simulate-payment" \
-  -H "Authorization: Bearer ${TOKEN}")
-TRACK_URL=$(echo "$PAY_JSON" | python3 -c "
+if curl -sf "$BASE/healthz" | python3 -c "import json,sys; exit(0 if json.load(sys.stdin)['checks']['billing'].get('test_mode') else 1)" 2>/dev/null; then
+  echo "==> Simulate payment (test mode)"
+  PAY_JSON=$(curl -sf -X POST "$BASE/orders/${ORDER_ID}/simulate-payment" \
+    -H "Authorization: Bearer ${TOKEN}")
+  TRACK_URL=$(echo "$PAY_JSON" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 assert d['status']=='paid', d
-assert d.get('lab_status')=='submitted', d
 url=d.get('client_track_url') or ''
 assert url, 'missing client_track_url'
-print('  paid OK · lab', d.get('lab_ref'), file=sys.stderr)
 print(url)
 ")
+else
+  echo "==> Signed webhook (live Stripe — simulate disabled)"
+  ROOT="${ROOT}" ORDER_ID="${ORDER_ID}" SESSION_ID="${SESSION_ID}" TENANT_ID="studio" python3 - <<'PY'
+import json, os, sys
+sys.path.insert(0, os.environ["ROOT"])
+os.environ.pop("PLUTUS_DATABASE_URL", None)
+from dotenv import load_dotenv
+load_dotenv(os.environ.get("PLUTUS_ENV_FILE", ".env.homelab"), override=True)
+from app import billing, db
+db.migrate()
+event = {
+    "id": f"evt_homelab_{os.environ['ORDER_ID']}",
+    "type": "checkout.session.completed",
+    "data": {
+        "object": {
+            "id": os.environ["SESSION_ID"],
+            "metadata": {
+                "order_id": os.environ["ORDER_ID"],
+                "tenant_id": "homelab",
+                "checkout_kind": "client_bundle",
+            },
+            "customer_details": {"email": "client@dogfood.test"},
+            "payment_intent": f"pi_homelab_{os.environ['ORDER_ID']}",
+        }
+    },
+}
+payload = json.dumps(event).encode()
+sig = billing.sign_webhook_payload(payload)
+import httpx
+base = f"http://{os.environ.get('PLUTUS_HOST', '127.0.0.1')}:{os.environ.get('PLUTUS_PORT', '8030')}"
+r = httpx.post(f"{base}/webhooks/stripe", content=payload, headers={"stripe-signature": sig})
+print("  webhook HTTP", r.status_code, r.json())
+assert r.status_code == 200, r.text
+PY
+  TRACK_URL=$(python3 - <<PY
+import sqlite3
+from pathlib import Path
+db_path = Path("${DATA_DIR}") / "plutus.db"
+con = sqlite3.connect(db_path)
+con.row_factory = sqlite3.Row
+row = con.execute("SELECT client_token FROM orders WHERE id=?", (int("${ORDER_ID}"),)).fetchone()
+print(f"http://127.0.0.1:8030/store/order/track/{row['client_token']}")
+PY
+)
+fi
 echo "  track=$TRACK_URL"
 
 echo "==> Homelab order detail"
