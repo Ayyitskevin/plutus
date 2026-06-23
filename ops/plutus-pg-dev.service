@@ -1,0 +1,13 @@
+[Unit]
+Description=Plutus dev Postgres (Docker)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker run -d --name plutus-pg-test --restart unless-stopped -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=plutus -p 5433:5432 postgres:16-alpine
+ExecStop=/usr/bin/docker stop plutus-pg-test
+
+[Install]
+WantedBy=default.target
