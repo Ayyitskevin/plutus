@@ -26,6 +26,15 @@ def test_saas_status(saas_client):
     assert r.json()["saas_mode"] is True
 
 
+def test_saas_root_public_redirects_to_landing(saas_client):
+    r = saas_client.get("/", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/ui/saas"
+    landing = saas_client.get("/ui/saas")
+    assert landing.status_code == 200
+    assert b"Sign in" in landing.content or b"sign" in landing.content.lower()
+
+
 def test_admin_create_tenant_and_issue_key(saas_client):
     r = saas_client.post(
         "/ui/saas/login",

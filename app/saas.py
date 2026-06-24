@@ -113,7 +113,8 @@ def _path_requires_saas_auth(path: str) -> bool:
     if any(path.startswith(prefix) for prefix in SAAS_AUTH_OWNED_PREFIXES):
         return False
     if path == "/":
-        return config.SAAS_MODE
+        # home() redirects to /ui/saas — must stay public for browser visitors
+        return False
     return any(path.startswith(prefix) for prefix in SAAS_PROTECTED_PREFIXES)
 
 
