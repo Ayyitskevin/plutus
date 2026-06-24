@@ -52,6 +52,7 @@
 <div class="card">
   <h3 style="margin-top:0">{{ run.gallery_name or 'Gallery' }} — {{ bundles|length }} bundle{{ 's' if bundles|length != 1 else '' }}</h3>
   <p class="small">Est. {{ run.estimated_total_cents|money }} · engine {{ run.engine }}</p>
+  <p style="margin:.5rem 0 0"><a class="btn secondary" href="/runs/{{ run.id }}/edit">Edit bundles</a></p>
   {% for bundle in bundles %}
   <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid #eee">
     <strong>{{ bundle.title or ('Bundle ' ~ loop.index) }}</strong>

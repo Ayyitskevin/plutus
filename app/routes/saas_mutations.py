@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from .. import (
     audit,
@@ -21,6 +21,7 @@ from .. import (
 )
 from ..async_io import run_sync
 from ..auth_context import AuthContext
+from ..bundle_editor import BundleEditError, parse_bundle_form, save_run_edits
 from ..metering import MeteringError
 from ..sell import SellError
 from ..storefront import StorefrontError, create_share_link
@@ -601,6 +602,30 @@ def ui_saas_tenant_revoke_key(request: Request, key_id: str):
     tenants.revoke_key(key_id)
     audit.record("tenant.key.revoke", request=request, ctx=ctx, resource=key_id)
     return RedirectResponse("/ui/saas/app?keys_updated=1", status_code=303)
+
+
+
+@router.post("/ui/saas/app/run-edit")
+async def ui_saas_run_edit(request: Request, run_id: int = Form(...)):
+    ctx = tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    from .homelab_ui import _run_edit_context
+
+    try:
+        await run_sync(
+            save_run_edits,
+            run_id=run_id,
+            tenant_id=ctx.tenant_id,
+            bundle_edits=parse_bundle_form(await request.form()),
+        )
+    except BundleEditError as exc:
+        ctx_data = _run_edit_context(request, run_id, edit_error=str(exc))
+        if not ctx_data:
+            return HTMLResponse("Run not found", status_code=404)
+        return templates.TemplateResponse(request, "run_edit.html", ctx_data, status_code=400)
+    audit.record("run.bundles.edit", request=request, ctx=ctx, resource=str(run_id))
+    return RedirectResponse(f"/runs/{run_id}?edited=1", status_code=303)
 
 
 

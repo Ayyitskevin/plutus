@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .bundle-edit { border-left: 4px solid var(--gold); margin-bottom: 1rem; }
+  .bundle-edit.disabled { opacity: .55; }
+  .bundle-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .bundle-fields label { display: block; margin-bottom: .65rem; }
+  .bundle-fields input[type=text], .bundle-fields textarea, .bundle-fields select {
+    width: 100%; font: inherit; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 6px;
+  }
+  .bundle-fields textarea { min-height: 4rem; resize: vertical; }
+  .item-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .5rem; }
+  @media (max-width: 640px) { .item-row { grid-template-columns: 1fr; } }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .secondary { background: #eee; color: var(--ink); }
+  .small { font-size: .85rem; color: var(--muted); }
+  .err { color: #a11; }
+</style>
+
+<div class="card">
+  <h2 style="margin-top:0">Edit bundles — {{ gallery_name }}</h2>
+  <p class="small">Tune packages before creating a client offer link. Disabled bundles stay off the storefront.</p>
+  {% if edit_error %}<p class="err">{{ edit_error }}</p>{% endif %}
+  {% if edit_saved %}<p class="status-ok">Bundles saved.</p>{% endif %}
+</div>
+
+<form method="post" action="{{ save_action }}">
+  {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+  <input type="hidden" name="run_id" value="{{ run.id }}">
+
+  {% for bundle in bundles %}
+  {% set bi = loop.index0 %}
+  <div class="card bundle-edit{% if bundle.enabled is defined and not bundle.enabled %} disabled{% endif %}">
+    <div class="bundle-head">
+      <h3 style="margin:0">{{ bundle.title or ('Bundle ' ~ loop.index) }}</h3>
+      <label class="small" style="margin:0">
+        <input type="checkbox" name="b{{ bi }}_enabled" {% if bundle.get('enabled', True) %}checked{% endif %}>
+        Include in client offer
+      </label>
+    </div>
+    <div class="bundle-fields" style="margin-top:.75rem">
+      <label class="small">Title
+        <input type="text" name="b{{ bi }}_title" value="{{ bundle.title or '' }}">
+      </label>
+      <label class="small">Pitch
+        <textarea name="b{{ bi }}_pitch">{{ bundle.pitch or '' }}</textarea>
+      </label>
+      {% for item in bundle.get('items') or [] %}
+      <div class="item-row">
+        <div class="small" style="padding-top:1.6rem">
+          <strong>{{ item.label or item.sku }}</strong>
+          {% if item.size %} {{ item.size }}{% endif %}
+          · {{ item.line_cents|money }}
+        </div>
+        <label class="small">Photo
+          <select name="b{{ bi }}_item{{ loop.index0 }}_photo">
+            {% for photo in gallery_photos %}
+            <option value="{{ photo.filename }}"
+              {% if item.photo and item.photo.filename == photo.filename %}selected{% endif %}>
+              {{ photo.filename }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      {% endfor %}
+      {% if bundle.get('photo_slots') %}
+      <label class="small" style="margin-top:.5rem">Gift-set photos (comma-separated filenames)
+        <input type="text" name="b{{ bi }}_photo_slots" value="{{ bundle.photo_slots | join(', ') }}">
+      </label>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="card actions">
+    <button type="submit">Save bundles</button>
+    <a class="btn secondary" href="/runs/{{ run.id }}">Back to review</a>
+    {% if sell_url %}<a class="btn secondary" href="{{ sell_url }}">Publish &amp; sell</a>{% endif %}
+  </div>
+</form>
+{% endblock %}

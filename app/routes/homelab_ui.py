@@ -17,6 +17,7 @@ from .. import (
     saas,
     service,
 )
+from ..bundle_editor import BundleEditError, photos_for_run, save_run_edits
 from ..storefront import StorefrontError, create_share_link
 from .deps import (
     request_auth,
@@ -104,6 +105,66 @@ def view_run(request: Request, run_id: int):
         ),
     )
 
+
+
+def _run_edit_context(request: Request, run_id: int, **extra):
+    ctx = request_auth(request)
+    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+    if not row:
+        return None
+    gallery_name = db.get_gallery_name(row["gallery_id"]) or f"Run {run_id}"
+    payload = row["payload"]
+    tenant_id = ctx.tenant_id if ctx and ctx.tenant_id else None
+    if config.SAAS_MODE:
+        save_action = "/ui/saas/app/run-edit"
+        sell_url = "/ui/saas/app/sell?run_id=" + str(run_id) if ctx and ctx.tenant_id else None
+    elif homelab.store_enabled():
+        save_action = "/ui/homelab/run-edit"
+        sell_url = None
+    else:
+        save_action = "/ui/homelab/run-edit"
+        sell_url = None
+    return ui_context(
+        request,
+        run=row,
+        bundles=payload.get("bundles") or [],
+        gallery_photos=photos_for_run(row),
+        gallery_name=gallery_name,
+        title=f"Edit run {run_id}",
+        save_action=save_action,
+        sell_url=sell_url,
+        tenant_id=tenant_id,
+        **extra,
+    )
+
+
+@router.get("/runs/{run_id}/edit", response_class=HTMLResponse)
+def edit_run(request: Request, run_id: int):
+    ctx_data = _run_edit_context(request, run_id)
+    if not ctx_data:
+        return HTMLResponse("Run not found", status_code=404)
+    return templates.TemplateResponse(request, "run_edit.html", ctx_data)
+
+
+@router.post("/ui/homelab/run-edit")
+async def ui_homelab_run_edit(request: Request, run_id: int = Form(...)):
+    if config.SAAS_MODE:
+        raise HTTPException(status_code=404, detail="use tenant portal")
+    tenant_id = homelab.tenant_id() if homelab.store_enabled() else None
+    try:
+        from ..bundle_editor import parse_bundle_form
+
+        save_run_edits(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            bundle_edits=parse_bundle_form(await request.form()),
+        )
+    except BundleEditError as exc:
+        ctx_data = _run_edit_context(request, run_id, edit_error=str(exc))
+        if not ctx_data:
+            return HTMLResponse("Run not found", status_code=404)
+        return templates.TemplateResponse(request, "run_edit.html", ctx_data, status_code=400)
+    return RedirectResponse(f"/runs/{run_id}?edited=1", status_code=303)
 
 
 @router.get("/runs/{run_id}/json", response_class=JSONResponse)

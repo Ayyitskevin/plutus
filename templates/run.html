@@ -12,11 +12,15 @@
     Client-facing recommendations — tune before sending.
     {% if run.engine == 'vision' %}Vision signals from Argus shaped bundle pairings.{% endif %}
   </p>
+  {% if request.query_params.get('edited') %}<p class="status-ok">Bundles updated.</p>{% endif %}
+  <p style="margin:.75rem 0 0">
+    <a class="btn" href="/runs/{{ run.id }}/edit">Edit bundles</a>
+  </p>
 </div>
 
 {% for bundle in bundles %}
-<div class="card bundle">
-  <h3>{{ bundle.title }}</h3>
+<div class="card bundle{% if bundle.enabled is defined and not bundle.enabled %} disabled{% endif %}"{% if bundle.enabled is defined and not bundle.enabled %} style="opacity:.55"{% endif %}>
+  <h3>{{ bundle.title }}{% if bundle.enabled is defined and not bundle.enabled %} <span class="small">(hidden from clients)</span>{% endif %}</h3>
   <p class="pitch">{{ bundle.pitch }}</p>
   {% for item in bundle.get('items') or [] %}
   <div class="item">

@@ -376,6 +376,37 @@ def insert_run(
         )
 
 
+def update_run(
+    run_id: int,
+    *,
+    tenant_id: str | None = None,
+    bundle_count: int | None = None,
+    estimated_total_cents: int | None = None,
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    fields: list[str] = []
+    params: list[Any] = []
+    if bundle_count is not None:
+        fields.append("bundle_count=?")
+        params.append(bundle_count)
+    if estimated_total_cents is not None:
+        fields.append("estimated_total_cents=?")
+        params.append(estimated_total_cents)
+    if payload is not None:
+        fields.append("payload_json=?")
+        params.append(json.dumps(payload))
+    if not fields:
+        return False
+    sql = f"UPDATE recommendation_runs SET {', '.join(fields)} WHERE id=?"
+    params.append(run_id)
+    if tenant_id:
+        sql += " AND tenant_id=?"
+        params.append(tenant_id)
+    with connection() as con:
+        cur = con.execute(sql, tuple(params))
+        return cur.rowcount > 0
+
+
 def get_run(run_id: int, *, tenant_id: str | None = None) -> dict[str, Any] | None:
     with connection() as con:
         if tenant_id:

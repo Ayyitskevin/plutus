@@ -84,6 +84,21 @@ def _gallery_theme(photos: list[Photo]) -> str:
     return "general"
 
 
+def refresh_item_photo(
+    item: dict[str, Any],
+    photo: Photo,
+    *,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
+    """Re-bind a catalog line item to a different gallery photo."""
+    product = catalog.get_product(str(item.get("sku") or ""))
+    if not product:
+        return item
+    qty = int(item.get("qty") or item.get("quantity") or 1)
+    refreshed = _line_item(product, photo, qty=qty, tenant_id=tenant_id)
+    return refreshed if refreshed else item
+
+
 def _line_item(
     product: Product,
     photo: Photo,

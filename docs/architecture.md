@@ -147,6 +147,12 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
 - Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
 
+## Tier 18 (bundle editor)
+
+- `/runs/{id}/edit` — tune title, pitch, photo per line item, enable/disable bundles
+- `app/bundle_editor.py` persists edits to `recommendation_runs.payload_json`
+- Disabled bundles omitted from storefront offers; checkout indices stay stable
+
 ## Tier 17 (client offer UX)
 
 - Offer pages show bundle hero + per-item photo thumbnails (`store_offer.html`)

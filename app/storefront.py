@@ -72,9 +72,10 @@ def resolve_offer(store_slug: str, token: str) -> dict[str, Any]:
     if not run:
         raise StorefrontError("offer no longer available")
     gallery_name = db.get_gallery_name(run["gallery_id"]) or f"Gallery {run['gallery_id']}"
-    bundles = run["payload"].get("bundles") or []
     priced_bundles = []
-    for idx, bundle in enumerate(bundles):
+    for idx, bundle in enumerate(run["payload"].get("bundles") or []):
+        if not bundle.get("enabled", True) or not bundle.get("items"):
+            continue
         total = orders.bundle_total_cents(bundle, tenant["id"])
         priced_bundles.append({**bundle, "index": idx, "total_cents": total})
     slug = tenant.get("store_slug") or tenant["id"]
