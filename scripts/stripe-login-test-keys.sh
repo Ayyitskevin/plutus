@@ -21,7 +21,12 @@ fi
 
 TEST_KEY=$("$STRIPE_BIN" config --get test_mode_api_key 2>/dev/null || true)
 if [[ -z "$TEST_KEY" ]]; then
-  echo "No test_mode_api_key in $CONFIG — complete Stripe CLI login first." >&2
+  echo "No test_mode_api_key in $CONFIG." >&2
+  echo "CLI login succeeded but only live_mode_api_key was stored." >&2
+  echo "Fix: Stripe Dashboard → toggle Test mode (top right) → Developers → API keys" >&2
+  echo "  Copy sk_test_... then either:" >&2
+  echo "    $STRIPE_BIN login --interactive   (paste sk_test when prompted)" >&2
+  echo "  or set STRIPE_SECRET_KEY=sk_test_... in .env and run stripe_setup.py" >&2
   exit 1
 fi
 
