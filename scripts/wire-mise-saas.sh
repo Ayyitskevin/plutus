@@ -39,9 +39,9 @@ for key in updates:
         print(f"  {key}={updates[key]}")
 PY
 
-echo "==> Optional: sync published originals from flow"
+echo "==> Sync published originals from flow"
 if [[ -x "$ROOT/scripts/sync-mise-media.sh" ]]; then
-  bash "$ROOT/scripts/sync-mise-media.sh" || echo "  (sync skipped — flow may be offline)"
+  MISE_SYNC_ALL=true bash "$ROOT/scripts/sync-mise-media.sh" || echo "  (sync skipped — flow may be offline)"
 fi
 
 if systemctl --user is-active plutus-saas >/dev/null 2>&1; then

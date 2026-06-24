@@ -68,6 +68,8 @@ TENANT_INVITE_TOKEN_HOURS = int(os.environ.get("PLUTUS_TENANT_INVITE_TOKEN_HOURS
 # Mise publish hook — default SaaS tenant when flow POSTs without tenant_id
 MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None
 MISE_HOOK_TOKEN = os.environ.get("PLUTUS_MISE_HOOK_TOKEN") or None
+# After a Mise gallery recommend, mint a client offer link automatically (SaaS default on).
+MISE_AUTO_OFFER = os.environ.get("PLUTUS_MISE_AUTO_OFFER", "true").lower() == "true"
 
 # Optional mnemosyne base for album-bundle cross-sell on client offer pages.
 MNEMOSYNE_URL = os.environ.get("PLUTUS_MNEMOSYNE_URL") or None

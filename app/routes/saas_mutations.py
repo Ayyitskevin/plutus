@@ -667,10 +667,10 @@ async def ui_saas_mise_recommend(
         resource=str(result["run_id"]),
         detail={"mise_gallery_id": gallery_id},
     )
-    return RedirectResponse(
-        f"/ui/saas/app/mise?recommended=1&run_id={result['run_id']}",
-        status_code=303,
-    )
+    qs = f"recommended=1&run_id={result['run_id']}"
+    if result.get("offer_url"):
+        qs += f"&offer_url={quote_plus(result['offer_url'])}"
+    return RedirectResponse(f"/ui/saas/app/mise?{qs}", status_code=303)
 
 
 

@@ -229,6 +229,9 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 ## M9 — suite integration loop (GitHub)
 
 - `scripts/dogfood-suite-loop.sh` + `dogfood_suite_loop.py` — Mise → Argus run-all → Plutus offer → Mnemosyne share CTA
+- `--plutus-only` / `PLUTUS_SUITE_PLUTUS_ONLY=true` — skip Argus when homelab Argus still points at `:8030`
+- `scripts/sync-mise-media.sh` — rsync flow originals (all published galleries when no IDs passed); sources plutus `.env`
+- `PLUTUS_MISE_AUTO_OFFER` — mint client offer link after each Mise gallery recommend (default on)
 - argus `plutus_client.create_share_link` uses `/integrations/offer` when `ARGUS_PLUTUS_TENANT_ID` set
 - mnemosyne `scripts/dogfood-plutus-prod.sh` + `dogfood-plutus-link.sh` — prod Plutus auto-link dogfood
 

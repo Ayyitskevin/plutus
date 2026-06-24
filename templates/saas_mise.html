@@ -22,7 +22,7 @@
   </p>
 </div>
 
-{% if mise_message %}<p class="status-ok">{{ mise_message }}{% if mise_run_id %} <a href="/runs/{{ mise_run_id }}">View run #{{ mise_run_id }}</a> · <a href="/ui/saas/app/sell?run_id={{ mise_run_id }}">Publish offer</a>{% endif %}</p>{% endif %}
+{% if mise_message %}<p class="status-ok">{{ mise_message }}{% if mise_run_id %} <a href="/runs/{{ mise_run_id }}">View run #{{ mise_run_id }}</a>{% if mise_offer_url %} · <a href="{{ mise_offer_url }}" target="_blank" rel="noopener">Client offer</a>{% else %} · <a href="/ui/saas/app/sell?run_id={{ mise_run_id }}">Publish offer</a>{% endif %}{% endif %}</p>{% endif %}
 {% if mise_error %}<p class="err">{{ mise_error }}</p>{% endif %}
 
 {% if not mise_configured %}

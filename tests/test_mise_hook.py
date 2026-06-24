@@ -105,5 +105,6 @@ def test_recommend_mise_gallery_accepts_hook_token(saas_client, tmp_path):
     assert r.status_code == 200
     body = r.json()
     assert body["run_id"] >= 1
+    assert body.get("offer_url", "").startswith("http")
     run = db.get_run(body["run_id"], tenant_id="flow-studio")
     assert run is not None

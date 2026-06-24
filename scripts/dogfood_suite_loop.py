@@ -27,16 +27,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _load_dotenv() -> None:
-    env = ROOT / ".env"
-    if not env.is_file():
+def _load_env_file(path: Path) -> None:
+    if not path.is_file():
         return
-    for line in env.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
         os.environ.setdefault(key.strip(), val.strip())
+
+
+def _load_dotenv() -> None:
+    _load_env_file(ROOT / ".env")
+    _load_env_file(ROOT.parent / "argus" / ".env")
 
 
 def _get(url: str, *, headers: dict | None = None, timeout: float = 15.0) -> tuple[int, str]:
@@ -48,6 +52,14 @@ def _get(url: str, *, headers: dict | None = None, timeout: float = 15.0) -> tup
         return exc.code, exc.read().decode(errors="replace")
 
 
+def _no_redirect_opener() -> urllib.request.OpenerDirector:
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    return urllib.request.build_opener(_NoRedirect())
+
+
 def _post_form(
     url: str,
     fields: dict[str, str],
@@ -55,11 +67,20 @@ def _post_form(
     headers: dict | None = None,
     opener: urllib.request.OpenerDirector | None = None,
     timeout: float = 120.0,
+    allow_redirects: bool = True,
 ) -> tuple[int, str, dict[str, str]]:
     body = urllib.parse.urlencode(fields).encode()
     hdrs = {"Content-Type": "application/x-www-form-urlencoded", **(headers or {})}
     req = urllib.request.Request(url, data=body, method="POST", headers=hdrs)
-    open_fn = opener.open if opener else urllib.request.urlopen
+    open_fn = (
+        opener.open
+        if opener
+        else (
+            _no_redirect_opener().open
+            if not allow_redirects
+            else urllib.request.urlopen
+        )
+    )
     try:
         with open_fn(req, timeout=timeout) as resp:
             loc = resp.headers.get("Location", "")
@@ -85,7 +106,11 @@ def _mnemosyne_base() -> str:
 
 
 def _token() -> str:
-    return os.environ.get("ARGUS_API_TOKEN") or os.environ.get("PLUTUS_API_TOKEN", "")
+    return (
+        os.environ.get("ARGUS_API_TOKEN")
+        or os.environ.get("PLUTUS_ARGUS_TOKEN")
+        or os.environ.get("PLUTUS_API_TOKEN", "")
+    )
 
 
 def _tenant_id() -> str:
@@ -96,6 +121,30 @@ def _tenant_id() -> str:
     )
 
 
+def run_plutus_mise_hook(gallery_id: int) -> dict:
+    """Direct Plutus SaaS path — skips Argus when homelab Argus points at :8030."""
+    token = os.environ.get("PLUTUS_MISE_HOOK_TOKEN", "")
+    if not token:
+        raise RuntimeError("PLUTUS_MISE_HOOK_TOKEN required")
+    code, body, _ = _post_form(
+        f"{_plutus_saas_base()}/webhooks/mise/gallery-published",
+        {"mise_gallery_id": str(gallery_id)},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=120.0,
+    )
+    if code != 200:
+        raise RuntimeError(f"plutus hook HTTP {code}: {body[:240]}")
+    payload = json.loads(body)
+    run_id = payload.get("run_id")
+    offer = payload.get("offer_url") or ""
+    bundles = payload.get("bundles") or []
+    return {
+        "offer_url": offer,
+        "message": f"upsell run {run_id} ({len(bundles)} bundles)",
+        "plutus_run_id": run_id,
+    }
+
+
 def run_argus_pipeline(gallery_id: int) -> dict:
     token = _token()
     if not token:
@@ -104,6 +153,7 @@ def run_argus_pipeline(gallery_id: int) -> dict:
         f"{_argus_base()}/ui/pipeline/run-all/{gallery_id}",
         {"api_token": token},
         timeout=600.0,
+        allow_redirects=False,
     )
     loc = meta.get("location") or ""
     if code != 303:
@@ -120,8 +170,17 @@ def run_argus_pipeline(gallery_id: int) -> dict:
     return {"offer_url": offer, "message": msg, "plutus_run_id": plutus_run_id}
 
 
+def _local_offer_url(public_url: str) -> str:
+    """Dogfood hits :8031 locally even when offers are minted with the public URL."""
+    public_base = os.environ.get("PLUTUS_SAAS_PUBLIC_URL", "").rstrip("/")
+    local_base = _plutus_saas_base()
+    if public_base and public_url.startswith(public_base):
+        return public_url.replace(public_base, local_base, 1)
+    return public_url
+
+
 def verify_plutus_offer(offer_url: str) -> None:
-    code, body = _get(offer_url, timeout=30.0)
+    code, body = _get(_local_offer_url(offer_url), timeout=30.0)
     if code != 200:
         raise RuntimeError(f"offer page HTTP {code}")
     if not re.search(r"package|bundle|buy", body, re.I):
@@ -206,6 +265,11 @@ def main() -> int:
     parser.add_argument("--gallery-id", type=int, default=int(os.environ.get("MISE_GALLERY_ID", "1")))
     parser.add_argument("--mnemosyne-album-id", type=int, default=None)
     parser.add_argument("--skip-mnemosyne", action="store_true")
+    parser.add_argument(
+        "--plutus-only",
+        action="store_true",
+        help="Call Plutus Mise webhook directly (skip Argus run-all)",
+    )
     args = parser.parse_args()
 
     _load_dotenv()
@@ -224,9 +288,16 @@ def main() -> int:
         if name != "mnemosyne" and code != 200:
             return 2
 
-    print(f"\n==> Argus pipeline run-all gallery #{args.gallery_id}")
+    if args.plutus_only:
+        print(f"\n==> Plutus Mise webhook gallery #{args.gallery_id}")
+    else:
+        print(f"\n==> Argus pipeline run-all gallery #{args.gallery_id}")
     try:
-        pipe = run_argus_pipeline(args.gallery_id)
+        pipe = (
+            run_plutus_mise_hook(args.gallery_id)
+            if args.plutus_only
+            else run_argus_pipeline(args.gallery_id)
+        )
     except Exception as exc:
         print(f"  FAIL: {exc}")
         return 2

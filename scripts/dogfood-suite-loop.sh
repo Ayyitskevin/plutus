@@ -21,5 +21,8 @@ ARGS=(--gallery-id "$GALLERY_ID")
 if [[ -n "$MNEMOSYNE_ALBUM" ]]; then
   ARGS+=(--mnemosyne-album-id "$MNEMOSYNE_ALBUM")
 fi
+if [[ "${PLUTUS_SUITE_PLUTUS_ONLY:-}" == "1" || "${PLUTUS_SUITE_PLUTUS_ONLY:-}" == "true" ]]; then
+  ARGS+=(--plutus-only)
+fi
 
 exec python3 "$ROOT/scripts/dogfood_suite_loop.py" "${ARGS[@]}"

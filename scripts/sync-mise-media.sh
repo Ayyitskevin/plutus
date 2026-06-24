@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
-# Rsync published Mise gallery originals from flow → local ARGUS_MISE_MEDIA_ROOT.
+# Rsync published Mise gallery originals from flow → local PLUTUS_MISE_MEDIA_ROOT.
 # Safe to cron; incremental. Does not delete remote-only files by default.
+# With no gallery IDs, syncs all published galleries (MISE_SYNC_ALL=true).
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
 
 FLOW_HOST="${MISE_FLOW_HOST:-flow}"
 REMOTE_ROOT="${MISE_REMOTE_MEDIA:-/opt/mise/data/media}"
-LOCAL_ROOT="${ARGUS_MISE_MEDIA_ROOT:-$HOME/ai-workspace/argus/data/mise-media}"
-TOKEN="${ARGUS_MISE_API_TOKEN:-}"
-MISE_URL="${ARGUS_MISE_URL:-http://flow:8400}"
+LOCAL_ROOT="${PLUTUS_MISE_MEDIA_ROOT:-${ARGUS_MISE_MEDIA_ROOT:-$HOME/ai-workspace/argus/data/mise-media}}"
+TOKEN="${ARGUS_MISE_API_TOKEN:-${PLUTUS_MISE_API_TOKEN:-}}"
+MISE_URL="${ARGUS_MISE_URL:-${PLUTUS_MISE_URL:-http://flow:8400}}"
 SYNC_ALL="${MISE_SYNC_ALL:-false}"
+
+if [[ $# -eq 0 && "$SYNC_ALL" != "true" && "$SYNC_ALL" != "1" ]]; then
+  SYNC_ALL=true
+fi
 
 mkdir -p "$LOCAL_ROOT"
 

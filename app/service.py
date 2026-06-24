@@ -4,7 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import logging
+
 from . import config, db, ingest, mise_client, recommend
+
+log = logging.getLogger("plutus.service")
 
 
 class RecommendError(Exception):
@@ -123,6 +127,29 @@ def analyze_mise_gallery(
     )
     result["mise_gallery_id"] = mise_gallery_id
     result["argus_run_id"] = effective_argus
+    if config.MISE_AUTO_OFFER and tenant_id:
+        from . import sell
+
+        try:
+            offer = sell.publish_offer(
+                tenant_id,
+                int(result["run_id"]),
+                label=row.get("title") or f"Gallery {mise_gallery_id}",
+            )
+            result.update(
+                {
+                    k: offer[k]
+                    for k in ("offer_url", "offer_token", "store_slug")
+                    if k in offer
+                }
+            )
+        except sell.SellError as exc:
+            log.warning(
+                "mise auto-offer skipped for gallery %s run %s: %s",
+                mise_gallery_id,
+                result.get("run_id"),
+                exc,
+            )
     return result
 
 

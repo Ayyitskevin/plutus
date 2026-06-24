@@ -242,10 +242,18 @@ def ui_saas_mise_galleries(request: Request):
             title="Mise galleries",
             tenant=ctx.tenant,
             galleries=galleries,
-            mise_message="Bundles generated — publish an offer from Publish & sell."
+            mise_message=(
+                "Bundles generated"
+                + (
+                    " — client offer ready."
+                    if request.query_params.get("offer_url")
+                    else " — publish an offer from Publish & sell."
+                )
+            )
             if request.query_params.get("recommended")
             else None,
             mise_run_id=request.query_params.get("run_id"),
+            mise_offer_url=request.query_params.get("offer_url"),
             mise_error=mise_error or request.query_params.get("error"),
         ),
     )
