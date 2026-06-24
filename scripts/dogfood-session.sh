@@ -18,28 +18,33 @@ dogfood_session_login() {
   local base="$1"
   local api_key="$2"
 
-  PLUTUS_DOGFOOD_COOKIE_JAR="${PLUTUS_DOGFOOD_COOKIE_JAR:-$(mktemp)}"
+  PLUTUS_DOGFOOD_COOKIE_JAR="$(mktemp)"
   export PLUTUS_DOGFOOD_COOKIE_JAR
 
   local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" \
-    -c "$PLUTUS_DOGFOOD_COOKIE_JAR" -b "$PLUTUS_DOGFOOD_COOKIE_JAR" \
-    -X POST "$base/ui/saas/login" -d "api_token=${api_key}")
-  if [[ "$code" != "303" ]]; then
-    echo "dogfood login failed HTTP $code" >&2
-    return 1
-  fi
+  local attempt html
+  for attempt in 1 2 3 4 5; do
+    code=$(curl -s -o /dev/null -w "%{http_code}" \
+      -c "$PLUTUS_DOGFOOD_COOKIE_JAR" -b "$PLUTUS_DOGFOOD_COOKIE_JAR" \
+      -X POST "$base/ui/saas/login" -d "api_token=${api_key}")
+    if [[ "$code" != "303" ]]; then
+      echo "dogfood login failed HTTP $code" >&2
+      return 1
+    fi
 
-  local html
-  html=$(curl -sf -b "$PLUTUS_DOGFOOD_COOKIE_JAR" "$base/ui/saas/app")
-  PLUTUS_DOGFOOD_CSRF=$(
-    echo "$html" | sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' | head -1
-  )
-  export PLUTUS_DOGFOOD_CSRF
-  if [[ -z "$PLUTUS_DOGFOOD_CSRF" ]]; then
-    echo "dogfood login: missing csrf_token on dashboard" >&2
-    return 1
-  fi
+    html=$(curl -sf -b "$PLUTUS_DOGFOOD_COOKIE_JAR" "$base/ui/saas/app" 2>/dev/null || true)
+    PLUTUS_DOGFOOD_CSRF=$(
+      echo "$html" | sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p' | head -1
+    )
+    if [[ -n "$PLUTUS_DOGFOOD_CSRF" ]]; then
+      export PLUTUS_DOGFOOD_CSRF
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "dogfood login: missing csrf_token on dashboard" >&2
+  return 1
 }
 
 # Authenticated GET (session cookie only).

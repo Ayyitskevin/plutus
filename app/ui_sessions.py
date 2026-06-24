@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -23,6 +24,11 @@ def _expires_iso() -> str:
 
 
 def cookie_secure() -> bool:
+    override = os.environ.get("PLUTUS_UI_COOKIE_SECURE", "").strip().lower()
+    if override in {"0", "false", "no"}:
+        return False
+    if override in {"1", "true", "yes"}:
+        return True
     return config.SAAS_PUBLIC_URL.lower().startswith("https")
 
 
