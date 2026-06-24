@@ -27,10 +27,6 @@ def _stripe_value_ok(value: str | None) -> bool:
     return "CHANGE_ME" not in upper
 
 
-def billing_enabled() -> bool:
-    return _stripe_value_ok(config.STRIPE_SECRET_KEY) and _stripe_value_ok(config.STRIPE_PRICE_ID)
-
-
 def stripe_configured() -> bool:
     return _stripe_value_ok(config.STRIPE_SECRET_KEY)
 
@@ -40,10 +36,25 @@ def stripe_test_mode() -> bool:
     return key.startswith("sk_test_") or key.startswith("rk_test_")
 
 
+def payments_allowed() -> bool:
+    """Stripe may create chargeable sessions (test keys always; live only when opted in)."""
+    if not stripe_configured():
+        return False
+    if stripe_test_mode():
+        return True
+    return config.STRIPE_LIVE_ENABLED
+
+
+def billing_enabled() -> bool:
+    return payments_allowed() and _stripe_value_ok(config.STRIPE_PRICE_ID)
+
+
 def billing_status() -> dict:
     return {
         "enabled": billing_enabled(),
+        "payments_allowed": payments_allowed(),
         "test_mode": stripe_test_mode(),
+        "live_enabled": config.STRIPE_LIVE_ENABLED,
         "price_id": config.STRIPE_PRICE_ID,
         "webhook_configured": bool(config.STRIPE_WEBHOOK_SECRET),
         "success_url": config.STRIPE_SUCCESS_URL,

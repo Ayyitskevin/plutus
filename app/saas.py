@@ -74,10 +74,14 @@ def validate_saas_startup() -> None:
             log.warning(
                 "PLUTUS_ALLOW_SIMULATE_PAYMENT is on with live Stripe keys — disable in prod"
             )
-        if not billing.billing_enabled():
+        if billing.stripe_configured() and not billing.payments_allowed():
             log.warning(
-                "STRIPE_PRICE_ID missing — tenant subscriptions disabled; "
-                "client bundle checkout still works with STRIPE_SECRET_KEY"
+                "Live Stripe keys configured but PLUTUS_STRIPE_LIVE_ENABLED is false — "
+                "client checkout and subscriptions are disabled until you opt in"
+            )
+        elif not billing.billing_enabled():
+            log.warning(
+                "STRIPE_PRICE_ID missing or payments disabled — tenant subscriptions off"
             )
         if not config.STRIPE_WEBHOOK_SECRET:
             log.warning("STRIPE_WEBHOOK_SECRET unset — /webhooks/stripe will reject events")

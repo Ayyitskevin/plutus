@@ -73,7 +73,7 @@ def store_offer(request: Request, slug: str, token: str):
             token=token,
             slug=slug,
             run_id=offer["run"]["id"],
-            stripe_enabled=billing.stripe_configured(),
+            stripe_enabled=billing.payments_allowed(),
             mnemosyne_url=config.MNEMOSYNE_URL,
             show_mnemosyne_cta=bool(
                 config.MNEMOSYNE_URL and catalog.bundles_include_album(offer["bundles"])

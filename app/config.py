@@ -170,6 +170,11 @@ SMTP_USER = os.environ.get("PLUTUS_SMTP_USER") or None
 SMTP_PASSWORD = os.environ.get("PLUTUS_SMTP_PASSWORD") or None
 SMTP_FROM = os.environ.get("PLUTUS_SMTP_FROM") or SMTP_USER
 
+# Live Stripe charges (sk_live_) require explicit opt-in; test keys always allowed.
+STRIPE_LIVE_ENABLED = (
+    os.environ.get("PLUTUS_STRIPE_LIVE_ENABLED", "false").lower() == "true"
+)
+
 # Dev/test — simulate client checkout completion without Stripe card (test keys only)
 ALLOW_SIMULATE_PAYMENT = (
     os.environ.get("PLUTUS_ALLOW_SIMULATE_PAYMENT", "false").lower() == "true"

@@ -93,8 +93,11 @@ def create_bundle_checkout(
     client_email: str | None = None,
     client_name: str | None = None,
 ) -> dict:
-    if not billing.stripe_configured():
-        raise OrderError("Stripe is not configured for client checkout")
+    if not billing.payments_allowed():
+        raise OrderError(
+            "Client checkout is disabled — use Stripe test keys or set "
+            "PLUTUS_STRIPE_LIVE_ENABLED=true when ready for real payments"
+        )
 
     prepared = prepare_bundle_order(
         tenant_id=tenant_id,
