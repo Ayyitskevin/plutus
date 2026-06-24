@@ -121,6 +121,13 @@ WHCC_API_URL = os.environ.get("WHCC_API_URL", "").rstrip("/")
 WHCC_API_KEY = os.environ.get("WHCC_API_KEY") or None
 WHCC_ACCOUNT_ID = os.environ.get("WHCC_ACCOUNT_ID") or None
 WHCC_WEBHOOK_SECRET = os.environ.get("WHCC_WEBHOOK_SECRET") or None
+WHCC_RETRY_ATTEMPTS = int(os.environ.get("WHCC_RETRY_ATTEMPTS", "3"))
+
+# Dionysus pitch enrichment (optional)
+DIONYSUS_URL = os.environ.get("PLUTUS_DIONYSUS_URL", "").rstrip("/")
+DIONYSUS_TOKEN = os.environ.get("PLUTUS_DIONYSUS_TOKEN") or None
+DIONYSUS_ORG_SLUG = os.environ.get("PLUTUS_DIONYSUS_ORG_SLUG") or None
+DIONYSUS_TIMEOUT = int(os.environ.get("PLUTUS_DIONYSUS_TIMEOUT", "10"))
 
 # Order notifications
 ORDER_ALERT_EMAIL = os.environ.get("PLUTUS_ORDER_ALERT_EMAIL") or None

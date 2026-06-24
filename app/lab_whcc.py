@@ -1,7 +1,8 @@
-"""WHCC lab adapter stub — real API wiring ready, simulates when unconfigured."""
+"""WHCC lab adapter — real API when configured, deterministic stub otherwise."""
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -17,23 +18,86 @@ _WHCC_FLOW = {
     "shipped": "complete",
 }
 
+_STATUS_MAP = {
+    "received": "submitted",
+    "in_production": "processing",
+    "shipped": "shipped",
+    "delivered": "complete",
+}
+
+_WHCC_RETRYABLE = {408, 429, 500, 502, 503, 504}
+
 
 def whcc_configured() -> bool:
     return bool(config.WHCC_API_URL and config.WHCC_API_KEY)
 
 
+def verify_webhook_token(token: str) -> bool:
+    secret = config.WHCC_WEBHOOK_SECRET
+    if not secret:
+        return False
+    normalized = (token or "").strip()
+    return normalized in {secret, f"Bearer {secret}"}
+
+
+def _map_status(remote: str, *, fallback: str = "") -> str | None:
+    return _STATUS_MAP.get((remote or "").lower()) or (fallback or None)
+
+
+def _headers() -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {config.WHCC_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
+def _request(method: str, path: str, *, json_body: dict | None = None) -> httpx.Response:
+    if not whcc_configured():
+        raise RuntimeError("WHCC is not configured")
+    url = f"{config.WHCC_API_URL.rstrip('/')}{path}"
+    attempts = max(1, int(getattr(config, "WHCC_RETRY_ATTEMPTS", 3)))
+    last_exc: Exception | None = None
+    with httpx.Client(timeout=30.0) as client:
+        for attempt in range(1, attempts + 1):
+            try:
+                resp = client.request(method, url, json=json_body, headers=_headers())
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                log.warning("WHCC %s %s attempt %s failed: %s", method, path, attempt, exc)
+                if attempt < attempts:
+                    time.sleep(min(2 ** attempt, 8))
+                continue
+            if resp.status_code in _WHCC_RETRYABLE and attempt < attempts:
+                log.warning(
+                    "WHCC %s %s retryable HTTP %s (attempt %s)",
+                    method,
+                    path,
+                    resp.status_code,
+                    attempt,
+                )
+                time.sleep(min(2 ** attempt, 8))
+                continue
+            return resp
+    raise RuntimeError(f"WHCC unreachable: {last_exc}") from last_exc
+
+
 def _order_payload(order: dict) -> dict[str, Any]:
     items = []
+    image_urls: list[str] = []
     for line in order.get("items") or []:
-        items.append(
-            {
-                "sku": line["sku"],
-                "description": line["label"],
-                "quantity": line["quantity"],
-                "unit_price_cents": line["unit_cents"],
-            }
-        )
-    return {
+        row = {
+            "sku": line["sku"],
+            "description": line["label"],
+            "quantity": line["quantity"],
+            "unit_price_cents": line["unit_cents"],
+        }
+        image_url = line.get("image_url") or line.get("preview_url")
+        if image_url:
+            row["image_url"] = image_url
+            image_urls.append(str(image_url))
+        items.append(row)
+    payload: dict[str, Any] = {
         "external_order_id": str(order["id"]),
         "tenant_id": order["tenant_id"],
         "run_id": order["run_id"],
@@ -44,6 +108,12 @@ def _order_payload(order: dict) -> dict[str, Any]:
         "line_items": items,
         "account_id": config.WHCC_ACCOUNT_ID,
     }
+    if image_urls:
+        payload["image_urls"] = image_urls
+    ship = order.get("shipping") if isinstance(order.get("shipping"), dict) else None
+    if ship:
+        payload["shipping_address"] = ship
+    return payload
 
 
 def submit_order(order_id: int) -> dict[str, Any]:
@@ -53,19 +123,13 @@ def submit_order(order_id: int) -> dict[str, Any]:
 
     payload = _order_payload(order)
     if whcc_configured():
-        url = f"{config.WHCC_API_URL.rstrip('/')}/orders"
-        headers = {
-            "Authorization": f"Bearer {config.WHCC_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        with httpx.Client(timeout=30.0) as client:
-            resp = client.post(url, json=payload, headers=headers)
+        resp = _request("POST", "/orders", json_body=payload)
         if resp.status_code >= 400:
             log.error("WHCC submit failed %s: %s", resp.status_code, resp.text[:300])
             raise RuntimeError(f"WHCC HTTP {resp.status_code}")
         body = resp.json()
         ref = body.get("order_id") or body.get("id") or f"whcc-{order_id}"
-        status = body.get("status") or "submitted"
+        status = _map_status(body.get("status") or "", fallback="submitted") or "submitted"
     else:
         ref = f"whcc-stub-{order_id}-{uuid.uuid4().hex[:8]}"
         status = "submitted"
@@ -90,22 +154,16 @@ def poll_order(order_id: int) -> dict[str, Any]:
         return {"order_id": order_id, "lab_status": current, "advanced": False}
 
     if whcc_configured() and order.get("lab_ref"):
-        url = f"{config.WHCC_API_URL.rstrip('/')}/orders/{order['lab_ref']}"
-        headers = {"Authorization": f"Bearer {config.WHCC_API_KEY}"}
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get(url, headers=headers)
+        resp = _request("GET", f"/orders/{order['lab_ref']}")
         if resp.status_code == 200:
             body = resp.json()
             remote = (body.get("status") or "").lower()
-            mapped = {
-                "received": "submitted",
-                "in_production": "processing",
-                "shipped": "shipped",
-                "delivered": "complete",
-            }.get(remote, current)
-            if mapped != current:
+            mapped = _map_status(remote, fallback=current)
+            if mapped and mapped != current:
                 db.update_order(order_id, lab_status=mapped)
-                db.insert_fulfillment_event(order_id, status=mapped, detail=f"whcc poll={remote}")
+                db.insert_fulfillment_event(
+                    order_id, status=mapped, detail=f"whcc poll={remote}"
+                )
                 from .lab import _notify_lab_transition
 
                 _notify_lab_transition(order_id, mapped)
@@ -133,15 +191,26 @@ def handle_webhook(payload: dict[str, Any]) -> bool:
     if not order:
         log.warning("WHCC webhook unknown ref %s", ref)
         return False
-    mapped = {
-        "received": "submitted",
-        "in_production": "processing",
-        "shipped": "shipped",
-        "delivered": "complete",
-    }.get(status)
+    mapped = _map_status(status)
     if not mapped:
         return False
     oid = int(order["id"])
     db.update_order(oid, lab_status=mapped)
     db.insert_fulfillment_event(oid, status=mapped, detail=f"whcc webhook={status}")
     return True
+
+
+def whcc_status() -> dict[str, Any]:
+    if not whcc_configured():
+        return {"configured": False, "reachable": False}
+    try:
+        resp = _request("GET", "/health")
+        reachable = resp.status_code < 500
+        return {
+            "configured": True,
+            "reachable": reachable,
+            "detail": None if reachable else f"HTTP {resp.status_code}",
+        }
+    except Exception as exc:
+        log.warning("WHCC health check failed: %s", exc)
+        return {"configured": True, "reachable": False, "detail": str(exc)}

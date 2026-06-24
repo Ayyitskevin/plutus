@@ -81,10 +81,33 @@ def _check_argus() -> dict[str, str | bool]:
 def _check_lab() -> dict[str, str | bool]:
     from . import lab
 
-    return {
+    out: dict[str, str | bool] = {
         "status": "ok" if lab.lab_enabled() else "disabled",
         "adapter": config.LAB_ADAPTER,
         "enabled": lab.lab_enabled(),
+    }
+    if config.LAB_ADAPTER == "whcc":
+        from . import lab_whcc
+
+        if lab_whcc.whcc_configured():
+            whcc = lab_whcc.whcc_status()
+            out["whcc_configured"] = True
+            if not whcc.get("reachable"):
+                out["status"] = "degraded"
+    return out
+
+
+def _check_dionysus() -> dict[str, str | bool]:
+    from . import dionysus_client
+
+    if not dionysus_client.is_enabled():
+        return {"status": "disabled", "configured": False}
+    st = dionysus_client.pitch_status()
+    reachable = bool(st.get("reachable"))
+    return {
+        "status": "ok" if reachable else "degraded",
+        "configured": True,
+        "org": st.get("org"),
     }
 
 
@@ -119,6 +142,7 @@ def build_health_report(*, worker: Any | None = None) -> dict:
         checks["argus"] = _check_argus()
         checks["billing"] = _check_billing()
         checks["lab"] = _check_lab()
+        checks["dionysus"] = _check_dionysus()
         checks["upload_worker"] = _check_upload_worker()
         checks["notifications"] = _check_notifications()
     elif homelab.store_enabled():

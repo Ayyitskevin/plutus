@@ -364,6 +364,8 @@ def view_run(request: Request, run_id: int):
         bundles=payload.get("bundles") or [],
         estimated_total_cents=int(payload.get("estimated_total_cents") or 0),
         photo_count=int(payload.get("photo_count") or 0),
+        gallery_theme=payload.get("gallery_theme"),
+        argus_run_id=row.get("argus_run_id"),
     )
     share_links = []
     if config.SAAS_MODE and ctx and ctx.tenant_id:
@@ -412,6 +414,8 @@ def run_pitch(request: Request, run_id: int):
         bundles=payload.get("bundles") or [],
         estimated_total_cents=int(payload.get("estimated_total_cents") or 0),
         photo_count=int(payload.get("photo_count") or 0),
+        gallery_theme=payload.get("gallery_theme"),
+        argus_run_id=row.get("argus_run_id"),
     )
 
 
@@ -620,14 +624,14 @@ async def whcc_webhook(request: Request):
     if not config.WHCC_WEBHOOK_SECRET:
         return error("whcc webhooks not configured", 400)
     token = request.headers.get("x-whcc-signature") or request.headers.get("authorization", "")
-    expected = f"Bearer {config.WHCC_WEBHOOK_SECRET}"
-    if token != expected and token != config.WHCC_WEBHOOK_SECRET:
+    from . import lab_whcc
+
+    if not lab_whcc.verify_webhook_token(token):
         return error("invalid whcc webhook auth", 401)
     try:
         payload = await request.json()
     except json.JSONDecodeError:
         return error("invalid json", 400)
-    from . import lab_whcc
 
     if not lab_whcc.handle_webhook(payload):
         return error("unhandled webhook", 404)

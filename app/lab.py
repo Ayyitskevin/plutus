@@ -145,4 +145,6 @@ def fulfillment_status() -> dict:
     }
     if config.LAB_ADAPTER == "whcc":
         out["whcc_configured"] = lab_whcc.whcc_configured()
+        if lab_whcc.whcc_configured():
+            out["whcc"] = lab_whcc.whcc_status()
     return out
