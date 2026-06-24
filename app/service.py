@@ -189,6 +189,15 @@ def process_upload_batch_analyze(
     batch = uploads.get_batch(batch_id, tenant_id=tenant_id)
     if not batch:
         raise RecommendError("upload batch not found")
+    existing_run_id = batch.get("run_id")
+    if existing_run_id:
+        db.update_upload_batch(batch_id, status="analyzed", analyze_error=None)
+        return {
+            "run_id": int(existing_run_id),
+            "upload_batch_id": batch_id,
+            "argus_run_id": batch.get("argus_run_id"),
+            "already_analyzed": True,
+        }
     folder = uploads.batch_folder(tenant_id, batch_id)
     effective_argus = _resolve_argus_run_id(
         folder,

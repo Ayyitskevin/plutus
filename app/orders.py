@@ -158,15 +158,17 @@ def mark_order_paid(
     from . import order_tracking
 
     track_token = order.get("client_token") or order_tracking.ensure_client_token(order_id)
-    db.update_order(
+    transitioned = db.mark_order_paid_if_pending(
         order_id,
-        status="paid",
         stripe_payment_intent=stripe_payment_intent,
         paid_at=datetime.now(UTC).isoformat(),
         client_email=client_email or order.get("client_email"),
         client_name=client_name or order.get("client_name"),
         client_token=track_token,
     )
+    if not transitioned:
+        return {"order_id": order_id, "status": "paid", "already_paid": True}
+
     tenant_id = order["tenant_id"]
     db.increment_tenant_usage(
         tenant_id,

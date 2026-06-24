@@ -656,6 +656,16 @@ def list_tenant_keys(tenant_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_tenant_api_key(key_id: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            """SELECT id, tenant_id, key_prefix, label, created_at, revoked_at
+               FROM tenant_api_keys WHERE id=?""",
+            (key_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def _usage_period(dt: datetime | None = None) -> str:
     dt = dt or datetime.now()
     return dt.strftime("%Y-%m")
@@ -1006,6 +1016,38 @@ def update_order(order_id: int, **fields) -> dict | None:
     with connection() as con:
         con.execute(f"UPDATE orders SET {assignments} WHERE id=?", values)
     return get_order(order_id)
+
+
+def mark_order_paid_if_pending(
+    order_id: int,
+    *,
+    stripe_payment_intent: str | None,
+    paid_at: str,
+    client_email: str | None,
+    client_name: str | None,
+    client_token: str,
+) -> bool:
+    """Atomically transition pending→paid. Returns True if this call won the transition."""
+    with connection() as con:
+        cur = con.execute(
+            """UPDATE orders
+               SET status='paid',
+                   stripe_payment_intent=?,
+                   paid_at=?,
+                   client_email=COALESCE(?, client_email),
+                   client_name=COALESCE(?, client_name),
+                   client_token=COALESCE(?, client_token)
+               WHERE id=? AND status='pending'""",
+            (
+                stripe_payment_intent,
+                paid_at,
+                client_email,
+                client_name,
+                client_token,
+                order_id,
+            ),
+        )
+        return cur.rowcount > 0
 
 
 def list_orders(*, tenant_id: str | None = None, limit: int = 50) -> list[dict]:

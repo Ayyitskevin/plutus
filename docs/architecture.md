@@ -105,6 +105,10 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 
 ## Tier 11 (GitHub)
 
+- Atomic `mark_order_paid_if_pending` — concurrent Stripe webhooks cannot double-count revenue
+- Stripe webhook dedup records all handled event types (not only invoice failures)
+- UI sessions invalidated when API key revoked or tenant deactivated
+- Upload worker skips re-analyze when batch already has `run_id`
 - Streaming multipart uploads (`uploads.add_upload_files` → `storage.save_gallery_stream`, 1MB chunks)
 - S3 multipart transfer (`boto3` `TransferConfig`, 8MB threshold) for large gallery originals
 - Dogfood scripts use `scripts/dogfood-session.sh` (`plutus_sid` + CSRF, not raw API key cookies)

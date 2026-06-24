@@ -68,7 +68,7 @@ def _s3_upload_fileobj(client, body, bucket: str, key: str) -> None:
         multipart_threshold=_S3_MULTIPART_THRESHOLD,
         multipart_chunksize=_S3_MULTIPART_CHUNK,
         max_concurrency=4,
-        use_threads=True,
+        use_threads=False,
     )
     client.upload_fileobj(body, bucket, key, Config=transfer)
 
@@ -154,11 +154,19 @@ def save_gallery_file(
     """Persist one gallery original; returns URI (path or s3://)."""
     safe = _safe_gallery_name(filename)
     if config.STORAGE_BACKEND == "s3" and _s3_ready():
-        import io
-
         key = f"{gallery_prefix(tenant_id, batch_id)}/{safe}"
         client = _s3_client()
-        _s3_upload_fileobj(client, io.BytesIO(data), config.S3_BUCKET, key)
+        if len(data) >= _S3_MULTIPART_THRESHOLD:
+            import io
+
+            _s3_upload_fileobj(client, io.BytesIO(data), config.S3_BUCKET, key)
+        else:
+            client.put_object(
+                Bucket=config.S3_BUCKET,
+                Key=key,
+                Body=data,
+                ContentType="application/octet-stream",
+            )
         uri = f"s3://{config.S3_BUCKET}/{key}"
         log.info("stored gallery file %s", uri)
         return uri
@@ -207,7 +215,10 @@ def _materialize_s3_uri(uri: str, cache_dir: Path) -> Path:
         return cache_path
     client = _s3_client()
     obj = client.get_object(Bucket=bucket, Key=key)
-    cache_path.write_bytes(obj["Body"].read())
+    with cache_path.open("wb") as out:
+        body = obj["Body"]
+        while chunk := body.read(_UPLOAD_CHUNK_BYTES):
+            out.write(chunk)
     return cache_path
 
 

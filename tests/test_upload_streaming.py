@@ -113,9 +113,10 @@ def test_s3_upload_uses_multipart_transfer_config(monkeypatch):
             monkeypatch.setattr(config, "S3_BUCKET", "test-bucket")
             monkeypatch.setattr(config, "S3_ACCESS_KEY", "key")
             monkeypatch.setattr(config, "S3_SECRET_KEY", "secret")
-            storage.save_gallery_file("t", "b", "photo.jpg", b"x" * 100)
+            storage.save_gallery_file("t", "b", "photo.jpg", b"x" * (8 * 1024 * 1024))
     assert captured.get("multipart_threshold") == 8 * 1024 * 1024
     assert captured.get("multipart_chunksize") == 8 * 1024 * 1024
+    assert captured.get("use_threads") is False
     mock_client.return_value.upload_fileobj.assert_called_once()
 
 

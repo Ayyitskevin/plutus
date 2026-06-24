@@ -499,7 +499,17 @@ async def ui_saas_tenant_catalog_save(request: Request):
         if not has_cents and not has_label and active:
             db.delete_product_override(ctx.tenant_id, sku)
             continue
-        unit_cents = int(str(cents_raw).strip()) if has_cents else product.unit_cents
+        if has_cents:
+            try:
+                unit_cents = int(str(cents_raw).strip())
+            except ValueError:
+                return RedirectResponse(
+                    "/ui/saas/app/catalog?"
+                    f"error={quote_plus(f'invalid price for {sku}')}",
+                    status_code=303,
+                )
+        else:
+            unit_cents = product.unit_cents
         label = str(label_raw).strip() if has_label else None
         db.upsert_product_override(
             ctx.tenant_id,

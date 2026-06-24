@@ -54,6 +54,7 @@ def test_checkout_subscription_activates_tenant(saas_db):
     assert tenant["billing_status"] == "active"
     assert tenant["plan_tier"] == "pro"
     assert tenant["monthly_recommend_cap"] == 500
+    assert db.is_stripe_webhook_processed("evt_sub_checkout")
 
 
 def test_subscription_updated_resolves_by_customer_id(saas_db):

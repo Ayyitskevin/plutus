@@ -233,7 +233,11 @@ def ui_saas_mise_galleries(request: Request):
 
 
 @router.get("/ui/saas/app/catalog", response_class=HTMLResponse)
-def ui_saas_tenant_catalog(request: Request, saved: str | None = Query(None)):
+def ui_saas_tenant_catalog(
+    request: Request,
+    saved: str | None = Query(None),
+    error: str | None = Query(None),
+):
     ctx = tenant_ui_redirect(request)
     if not isinstance(ctx, AuthContext):
         return ctx
@@ -245,6 +249,7 @@ def ui_saas_tenant_catalog(request: Request, saved: str | None = Query(None)):
             tenant=ctx.tenant,
             products=catalog.list_catalog(ctx.tenant_id),
             catalog_message="Pricing saved." if saved else None,
+            catalog_error=error,
         ),
     )
 

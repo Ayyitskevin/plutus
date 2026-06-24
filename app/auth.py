@@ -22,15 +22,29 @@ def token_from_request(
     return None
 
 
-def _ctx_from_session(request: Request, session: dict) -> AuthContext:
+def _ctx_from_session(
+    request: Request,
+    session: dict,
+    *,
+    session_id: str | None = None,
+) -> AuthContext:
     if session.get("is_admin"):
         ctx = AuthContext(is_admin=True)
     else:
         tenant_id = session.get("tenant_id")
         tenant = db.get_tenant(tenant_id) if tenant_id else None
-        if not tenant:
+        if not tenant or not tenant.get("active", True):
+            if session_id:
+                ui_sessions.delete_session(session_id)
             raise HTTPException(status_code=401, detail="session invalid")
-        ctx = AuthContext(tenant=tenant, api_key_id=session.get("api_key_id"))
+        api_key_id = session.get("api_key_id")
+        if api_key_id:
+            key = db.get_tenant_api_key(str(api_key_id))
+            if not key or key.get("revoked_at"):
+                if session_id:
+                    ui_sessions.delete_session(session_id)
+                raise HTTPException(status_code=401, detail="session invalid")
+        ctx = AuthContext(tenant=tenant, api_key_id=api_key_id)
     set_auth_context(ctx)
     request.state.auth = ctx
     request.state.ui_session = session
@@ -46,7 +60,7 @@ def resolve_auth(
     session_id = request.cookies.get(ui_sessions.UI_SESSION_COOKIE)
     session = ui_sessions.get_session(session_id)
     if session:
-        return _ctx_from_session(request, session)
+        return _ctx_from_session(request, session, session_id=session_id)
 
     provided = token_from_request(
         request, authorization=authorization, form_token=form_token

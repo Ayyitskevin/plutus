@@ -227,23 +227,22 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
     if etype == "checkout.session.completed":
         if checkout_kind == "client_bundle" or metadata.get("order_id"):
             orders_mod.handle_checkout_completed(obj)
-            return
-        sub_id = obj.get("subscription")
-        customer_id = obj.get("customer")
-        tid = _resolve_tenant_id()
-        if tid:
-            db.update_tenant(
-                tid,
-                stripe_customer_id=customer_id,
-                stripe_subscription_id=sub_id,
-                billing_status="active",
-                plan_tier="pro",
-                monthly_recommend_cap=500,
-            )
-            log.info("activated billing for tenant %s", tid)
-        return
+        else:
+            sub_id = obj.get("subscription")
+            customer_id = obj.get("customer")
+            tid = _resolve_tenant_id()
+            if tid:
+                db.update_tenant(
+                    tid,
+                    stripe_customer_id=customer_id,
+                    stripe_subscription_id=sub_id,
+                    billing_status="active",
+                    plan_tier="pro",
+                    monthly_recommend_cap=500,
+                )
+                log.info("activated billing for tenant %s", tid)
 
-    if etype in {"customer.subscription.updated", "customer.subscription.created"}:
+    elif etype in {"customer.subscription.updated", "customer.subscription.created"}:
         tid = _resolve_tenant_id()
         status = obj.get("status")
         if tid and status:
@@ -253,9 +252,8 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
                 billing_status=status,
                 active=status in {"active", "trialing"},
             )
-        return
 
-    if etype == "customer.subscription.deleted":
+    elif etype == "customer.subscription.deleted":
         tid = _resolve_tenant_id()
         if tid:
             db.update_tenant(
@@ -264,9 +262,8 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
                 plan_tier="free",
                 stripe_subscription_id=None,
             )
-        return
 
-    if etype == "invoice.payment_failed":
+    elif etype == "invoice.payment_failed":
         tid = _resolve_tenant_id()
         if tid:
             db.update_tenant(tid, billing_status="past_due", active=False)

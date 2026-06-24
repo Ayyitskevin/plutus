@@ -209,6 +209,9 @@ def test_s3_storage_with_mocked_boto(tmp_path, monkeypatch):
     stored_objects: dict[str, bytes] = {}
     mock_client = MagicMock()
 
+    def put_object(**kwargs):
+        stored_objects[kwargs["Key"]] = kwargs["Body"]
+
     def upload_fileobj(fileobj, bucket, key, **kwargs):
         del bucket, kwargs
         stored_objects[key] = fileobj.read()
@@ -223,10 +226,12 @@ def test_s3_storage_with_mocked_boto(tmp_path, monkeypatch):
 
     def get_object(**kwargs):
         key = kwargs["Key"]
+        payload = stored_objects[key]
         body = MagicMock()
-        body.read.return_value = stored_objects[key]
+        body.read.side_effect = [payload, b""]
         return {"Body": body}
 
+    mock_client.put_object.side_effect = put_object
     mock_client.upload_fileobj.side_effect = upload_fileobj
     mock_client.list_objects_v2.side_effect = list_objects_v2
     mock_client.get_object.side_effect = get_object
