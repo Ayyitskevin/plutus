@@ -183,8 +183,14 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 ## M2 — operator-led onboarding (GitHub)
 
 - `PLUTUS_SIGNUP_ENABLED` defaults false — public signup closed; invite via admin UI
-- Admin create tenant accepts **notify email**; sends welcome email with bootstrap API key when SMTP armed
-- `notifications.send_tenant_welcome_email` — login, dashboard, storefront, getting-started steps
+- Admin create tenant accepts **notify email**; sends welcome email when SMTP armed
+- `notifications.send_tenant_welcome_email` — invite link or manual API key fallback
+
+## M6 — invite claim tokens (GitHub)
+
+- `tenant_invites` table + `app/tenant_invite.py` — one-time `/ui/saas/claim-invite?token=…`
+- Welcome email contains claim URL (not raw API key) when SMTP armed; admin page shows key only without SMTP
+- Resend welcome rotates pending invite tokens
 
 ## M5 — deploy packaging + integration offer API (GitHub)
 
@@ -192,6 +198,11 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `POST /integrations/offer` — one-shot offer mint (admin + `tenant_id` or tenant key)
 - `storefront.link_tenant_for_bearer` — shared tenant resolution for share-links + integrations
 - mnemosyne `plutus_api` calls `/integrations/offer`
+
+## M7 — container CI + homelab deploy helper (GitHub)
+
+- `scripts/ci-docker.sh` + CI `docker-smoke` job — image build + `/healthz` in container
+- `scripts/deploy-homelab-saas.sh` — `git pull` + restart `plutus-saas.service`
 
 ## M4 — trust surface + invite polish (GitHub)
 
