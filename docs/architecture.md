@@ -147,7 +147,11 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
 - Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
 
+## Tier 16 (fleet — public URL)
+
+- `scripts/wire-cloudflare-flow.sh` — `plutus.kleephotography.com` via flow's `mise` tunnel → `strix-halo-a9-mega:8031`
+- DNS CNAME routed; one-time `sudo cp` + `systemctl restart cloudflared` on flow activates ingress
+
 ## Not built yet
 
-- WHCC live API credentials on production fleet (HMAC + stub path ready)
-- Cloudflare tunnel `--bootstrap` for public SaaS URL (template + systemd unit ready)
+- WHCC live API credentials on production fleet (HMAC + stub path ready; `scripts/wire-whcc.sh`)
