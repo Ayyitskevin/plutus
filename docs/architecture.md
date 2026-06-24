@@ -80,7 +80,13 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 | `wire-public-url.sh` | `PLUTUS_SAAS_PUBLIC_URL` (+ optional Tailscale serve) |
 | `wire-tier7.sh` / `wire-tier8.sh` | Orchestrators (Tier 8 defaults to GitHub-only tests) |
 
+## Tier 9 (GitHub)
+
+- Signup email verification (`PLUTUS_SIGNUP_VERIFY_EMAIL` + SMTP)
+- Tenant notify-email on dashboard (`POST /ui/saas/app/settings`)
+- Mise publish hook (`POST /webhooks/mise/gallery-published`, `PLUTUS_MISE_HOOK_TENANT_ID`)
+- Cloudflare tunnel templates (`ops/cloudflare-tunnel.example.yml`, `wire-cloudflare-tunnel.sh`)
+
 ## Not built yet
 
-- Signup email verification
-- Public HTTPS hostname (Cloudflare tunnel) without manual tunnel setup
+- Automated Cloudflare tunnel provisioning (manual `cloudflared tunnel create` still required)

@@ -212,33 +212,59 @@ def recommend_mise_gallery_api(
     mise_gallery_id: int = Form(...),
     limit: int | None = Form(None),
     argus_run_id: int | None = Form(None),
+    tenant_id: str | None = Form(None),
     ctx: AuthContext = Depends(require_bearer),
 ) -> JSONResponse:
-    if config.SAAS_MODE and not ctx.is_admin and not ctx.tenant_id:
-        raise HTTPException(status_code=403, detail="tenant required")
-    if config.SAAS_MODE:
-        tenant_id = ctx.tenant_id
+    from . import mise_hook
+
+    if config.SAAS_MODE and ctx.is_admin:
+        scope = mise_hook.resolve_hook_tenant_id(tenant_id)
+    elif config.SAAS_MODE:
+        scope = ctx.tenant_id
     elif homelab.store_enabled():
         homelab.ensure_bootstrap()
-        tenant_id = homelab.tenant_id()
+        scope = homelab.tenant_id()
     else:
-        tenant_id = None
-    try:
-        result = service.analyze_mise_gallery(
-            mise_gallery_id,
-            limit=limit,
-            argus_run_id=argus_run_id,
-            tenant_id=tenant_id,
-        )
-    except MeteringError as exc:
-        raise HTTPException(status_code=402, detail=str(exc)) from exc
-    except service.RecommendError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    if tenant_id:
-        metrics.inc_tenant(tenant_id, "recommend_mise")
+        scope = None
+    result = mise_hook.recommend_published_gallery(
+        mise_gallery_id=mise_gallery_id,
+        tenant_id=scope,
+        argus_run_id=argus_run_id,
+        limit=limit,
+    )
+    if scope:
+        metrics.inc_tenant(scope, "recommend_mise")
         audit.record("recommend.mise", request=request, ctx=ctx, resource=str(result["run_id"]))
+    return JSONResponse(result)
+
+
+@app.post("/webhooks/mise/gallery-published")
+def mise_gallery_published_webhook(
+    request: Request,
+    mise_gallery_id: int = Form(...),
+    tenant_id: str | None = Form(None),
+    argus_run_id: int | None = Form(None),
+    limit: int | None = Form(None),
+) -> JSONResponse:
+    from . import mise_hook
+
+    mise_hook.verify_hook_token(request)
+    result = mise_hook.recommend_published_gallery(
+        mise_gallery_id=mise_gallery_id,
+        tenant_id=tenant_id,
+        argus_run_id=argus_run_id,
+        limit=limit,
+    )
+    scope = mise_hook.resolve_hook_tenant_id(tenant_id)
+    if scope:
+        metrics.inc_tenant(scope, "recommend_mise")
+        audit.record(
+            "recommend.mise.hook",
+            request=request,
+            tenant_id=scope,
+            resource=str(result["run_id"]),
+            detail={"mise_gallery_id": mise_gallery_id},
+        )
     return JSONResponse(result)
 
 
@@ -729,6 +755,17 @@ def ui_saas_signup_post(
             ),
             status_code=400,
         )
+    if result.get("verification_required"):
+        return templates.TemplateResponse(
+            request,
+            "saas_signup_pending.html",
+            _ui_context(
+                title="Confirm your email",
+                verify_email=result.get("verify_email"),
+                tenant_name=result["tenant"]["name"],
+            ),
+            status_code=200,
+        )
     api_key = result["api_key"]
     audit.record(
         "tenant.signup",
@@ -772,6 +809,63 @@ def ui_saas_signup_post(
     return response
 
 
+@app.get("/ui/saas/verify-email", response_class=HTMLResponse)
+def ui_saas_verify_email(request: Request, token: str | None = Query(None)):
+    from . import signup_verify
+
+    if not token:
+        return templates.TemplateResponse(
+            request,
+            "saas_verify_email.html",
+            _ui_context(title="Email verification", verify_error="missing verification token"),
+            status_code=400,
+        )
+    try:
+        result = signup_verify.verify_token(token)
+    except signup_verify.SignupVerifyError as exc:
+        return templates.TemplateResponse(
+            request,
+            "saas_verify_email.html",
+            _ui_context(title="Email verification", verify_error=str(exc)),
+            status_code=400,
+        )
+    response = templates.TemplateResponse(
+        request,
+        "saas_signup_welcome.html",
+        _ui_context(
+            title="Welcome",
+            tenant=result["tenant"],
+            api_key=result["api_key"],
+            store_url=result["store_url"],
+            trial_days=config.SIGNUP_TRIAL_DAYS,
+            trial_cap=config.SIGNUP_TRIAL_RECOMMEND_CAP,
+        ),
+    )
+    response.set_cookie(
+        UI_TOKEN_COOKIE,
+        result["api_key"],
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,
+    )
+    audit.record(
+        "tenant.signup.verified",
+        request=request,
+        tenant_id=result["tenant"]["id"],
+        resource=result["tenant"]["id"],
+    )
+    return response
+
+
+@app.post("/ui/saas/resend-verification")
+def ui_saas_resend_verification(email: str = Form(...)):
+    from . import signup_verify
+
+    if signup_verify.resend_for_email(email):
+        return RedirectResponse("/ui/saas/login?resent=1", status_code=303)
+    return RedirectResponse("/ui/saas/login?resent=0", status_code=303)
+
+
 @app.post("/ui/logout")
 def ui_logout():
     response = RedirectResponse("/ui/saas/login", status_code=303)
@@ -808,13 +902,14 @@ def ui_saas_tenant_app(request: Request):
         item["is_current"] = item["id"] == ctx.api_key_id
         tenant_keys.append(item)
     orders_list = db.list_orders(tenant_id=ctx.tenant_id, limit=10)
+    tenant = db.get_tenant(ctx.tenant_id) or ctx.tenant
     return templates.TemplateResponse(
         request,
         "saas_dashboard.html",
         _ui_context(
             title="Dashboard",
             portal_mode="tenant",
-            tenant=ctx.tenant,
+            tenant=tenant,
             usage=usage,
             cap_warnings=usage.get("warnings") or [],
             recent_runs=recent,
@@ -825,8 +920,31 @@ def ui_saas_tenant_app(request: Request):
             audit_events=db.list_audit_events(tenant_id=ctx.tenant_id, limit=10),
             tenant_message="API key revoked." if request.query_params.get("keys_updated") else None,
             tenant_error=request.query_params.get("keys_error"),
+            settings_message="Notification email saved."
+            if request.query_params.get("settings_saved")
+            else None,
+            settings_error=request.query_params.get("settings_error"),
         ),
     )
+
+
+@app.post("/ui/saas/app/settings")
+def ui_saas_tenant_settings(
+    request: Request,
+    notify_email: str | None = Form(None),
+):
+    ctx = _tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    addr = (notify_email or "").strip().lower()
+    if addr and ("@" not in addr or "." not in addr.split("@")[-1]):
+        return RedirectResponse(
+            "/ui/saas/app?settings_error=invalid+email",
+            status_code=303,
+        )
+    db.update_tenant(ctx.tenant_id, notify_email=addr or None)
+    audit.record("tenant.settings.notify_email", request=request, ctx=ctx)
+    return RedirectResponse("/ui/saas/app?settings_saved=1", status_code=303)
 
 
 def _admin_ui_redirect(request: Request) -> AuthContext | RedirectResponse:

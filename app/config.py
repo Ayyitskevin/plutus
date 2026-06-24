@@ -55,6 +55,20 @@ SIGNUP_TRIAL_RECOMMEND_CAP = int(os.environ.get("PLUTUS_SIGNUP_TRIAL_RECOMMEND_C
 SIGNUP_REDIRECT_BILLING = (
     os.environ.get("PLUTUS_SIGNUP_REDIRECT_BILLING", "false").lower() == "true"
 )
+SIGNUP_VERIFY_EMAIL = os.environ.get("PLUTUS_SIGNUP_VERIFY_EMAIL", "true").lower() == "true"
+SIGNUP_VERIFY_TOKEN_HOURS = int(os.environ.get("PLUTUS_SIGNUP_VERIFY_TOKEN_HOURS", "48"))
+SIGNUP_VERIFY_DEV_BYPASS = (
+    os.environ.get("PLUTUS_SIGNUP_VERIFY_DEV_BYPASS", "false").lower() == "true"
+)
+
+# Mise publish hook — default SaaS tenant when flow POSTs without tenant_id
+MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None
+MISE_HOOK_TOKEN = (
+    os.environ.get("PLUTUS_MISE_HOOK_TOKEN")
+    or os.environ.get("PLUTUS_MISE_API_TOKEN")
+    or os.environ.get("PLUTUS_API_TOKEN")
+    or None
+)
 
 # Ops
 RATE_LIMIT_ENABLED = os.environ.get("PLUTUS_RATE_LIMIT_ENABLED", "true").lower() == "true"

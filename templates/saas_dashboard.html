@@ -97,6 +97,8 @@
 
 {% if tenant_message %}<p class="status-ok">{{ tenant_message }}</p>{% endif %}
 {% if tenant_error %}<p class="status-err">{{ tenant_error }}</p>{% endif %}
+{% if settings_message %}<p class="status-ok">{{ settings_message }}</p>{% endif %}
+{% if settings_error %}<p class="status-err">Invalid notification email.</p>{% endif %}
 {% if issued_api_key %}
 <div class="key-banner">
   <p style="margin:0 0 .5rem"><strong>New API key — copy now</strong></p>
@@ -159,6 +161,17 @@
   {% else %}
   <p class="small">No client orders yet.</p>
   {% endif %}
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">Order notifications</h3>
+  <p class="small" style="margin:0 0 .75rem">Get email when clients pay or when lab orders ship.</p>
+  <form method="post" action="/ui/saas/app/settings">
+    <label class="small">Notify email
+      <input type="email" name="notify_email" value="{{ tenant.notify_email or '' }}" placeholder="you@studio.com">
+    </label>
+    <button type="submit" style="margin-top:.5rem">Save</button>
+  </form>
 </div>
 
 <div class="card">

@@ -241,6 +241,27 @@ def _sqlite_migrate() -> None:
         tenant_cols = {r[1] for r in con.execute("PRAGMA table_info(tenants)")}
         if "notify_email" not in tenant_cols:
             con.execute("ALTER TABLE tenants ADD COLUMN notify_email TEXT")
+        if "email_verified_at" not in tenant_cols:
+            con.execute("ALTER TABLE tenants ADD COLUMN email_verified_at TEXT")
+            con.execute(
+                "UPDATE tenants SET email_verified_at=created_at "
+                "WHERE email_verified_at IS NULL"
+            )
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS signup_verifications (
+                token TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                email TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL,
+                verified_at TEXT
+            )"""
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_signup_verify_tenant "
+            "ON signup_verifications(tenant_id, created_at)"
+        )
         order_cols = {r[1] for r in con.execute("PRAGMA table_info(orders)")}
         for col, typ in [("lab_status", "TEXT"), ("lab_ref", "TEXT"), ("client_token", "TEXT")]:
             if col not in order_cols:
@@ -396,6 +417,7 @@ def _tenant_dict(row: sqlite3.Row | None) -> dict | None:
         "billing_status": row["billing_status"] if "billing_status" in keys else None,
         "plan_tier": row["plan_tier"] if "plan_tier" in keys else None,
         "notify_email": row["notify_email"] if "notify_email" in keys else None,
+        "email_verified_at": row["email_verified_at"] if "email_verified_at" in keys else None,
     }
 
 
@@ -460,6 +482,7 @@ def update_tenant(tenant_id: str, **fields) -> dict | None:
         "billing_status",
         "plan_tier",
         "notify_email",
+        "email_verified_at",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
@@ -474,6 +497,55 @@ def update_tenant(tenant_id: str, **fields) -> dict | None:
             values,
         )
     return get_tenant(tenant_id)
+
+
+def insert_signup_verification(
+    *,
+    token: str,
+    tenant_id: str,
+    email: str,
+    api_key: str,
+    expires_at: str,
+) -> None:
+    with connection() as con:
+        con.execute(
+            """INSERT INTO signup_verifications
+               (token, tenant_id, email, api_key, expires_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (token, tenant_id, email, api_key, expires_at),
+        )
+
+
+def get_signup_verification(token: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            "SELECT * FROM signup_verifications WHERE token=?",
+            (token,),
+        ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def get_pending_signup_verification_by_email(email: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            """SELECT * FROM signup_verifications
+               WHERE email=? AND verified_at IS NULL
+               ORDER BY created_at DESC LIMIT 1""",
+            (email,),
+        ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def mark_signup_verification_verified(token: str, *, verified_at: str) -> None:
+    with connection() as con:
+        con.execute(
+            "UPDATE signup_verifications SET verified_at=? WHERE token=?",
+            (verified_at, token),
+        )
 
 
 def insert_tenant_api_key(
@@ -499,7 +571,8 @@ def find_tenant_by_key_prefix(key_prefix: str) -> list[dict]:
                       t.id AS tenant_id, t.name, t.store_slug, t.active,
                       t.monthly_recommend_cap, t.created_at, t.updated_at,
                       t.stripe_customer_id, t.stripe_subscription_id,
-                      t.billing_status, t.plan_tier
+                      t.billing_status, t.plan_tier, t.notify_email,
+                      t.email_verified_at
                FROM tenant_api_keys k
                JOIN tenants t ON t.id = k.tenant_id
                WHERE k.key_prefix=? AND k.revoked_at IS NULL AND t.active=1""",
@@ -519,6 +592,10 @@ def find_tenant_by_key_prefix(key_prefix: str) -> list[dict]:
             "stripe_subscription_id": row["stripe_subscription_id"],
             "billing_status": row["billing_status"],
             "plan_tier": row["plan_tier"],
+            "notify_email": row["notify_email"] if "notify_email" in row.keys() else None,
+            "email_verified_at": row["email_verified_at"]
+            if "email_verified_at" in row.keys()
+            else None,
         }
         out.append({"key_id": row["key_id"], "key_hash": row["key_hash"], "tenant": tenant})
     return out

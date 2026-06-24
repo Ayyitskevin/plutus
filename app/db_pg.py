@@ -46,8 +46,22 @@ CREATE TABLE IF NOT EXISTS tenants (
     stripe_subscription_id TEXT,
     billing_status TEXT,
     plan_tier TEXT DEFAULT 'trial',
-    notify_email TEXT
+    notify_email TEXT,
+    email_verified_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS signup_verifications (
+    token TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    email TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    verified_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_signup_verify_tenant
+    ON signup_verifications(tenant_id, created_at);
 
 CREATE TABLE IF NOT EXISTS tenant_api_keys (
     id TEXT PRIMARY KEY,
@@ -248,6 +262,13 @@ def ping() -> bool:
 def migrate() -> None:
     with connection() as con:
         con.executescript(_SCHEMA)
+        con.execute(
+            "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ"
+        )
+        con.execute(
+            "UPDATE tenants SET email_verified_at=created_at "
+            "WHERE email_verified_at IS NULL"
+        )
         missing = con.execute(
             "SELECT id FROM orders WHERE client_token IS NULL OR client_token = ''"
         ).fetchall()

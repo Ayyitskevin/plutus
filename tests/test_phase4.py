@@ -12,6 +12,7 @@ def saas_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "SAAS_MODE", True)
     monkeypatch.setattr(config, "SIGNUP_ENABLED", True)
+    monkeypatch.setattr(config, "SIGNUP_VERIFY_EMAIL", False)
     monkeypatch.setattr(config, "API_TOKEN", "admin-secret")
     monkeypatch.setattr(config, "TENANT_KEY_PEPPER", "pepper-secret")
     monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)

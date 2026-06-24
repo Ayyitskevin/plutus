@@ -1,0 +1,10 @@
+# Copy to ~/.cloudflared/plutus.yml after: cloudflared tunnel create plutus-saas
+# Route DNS: cloudflared tunnel route dns plutus-saas plutus.kleephotography.com
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /home/kevin-lee/.cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  - hostname: plutus.kleephotography.com
+    service: http://127.0.0.1:8031
+  - service: http_status:404

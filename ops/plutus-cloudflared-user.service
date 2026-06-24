@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare tunnel — Plutus SaaS public HTTPS
+After=network-online.target plutus-saas.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared tunnel --config %h/.cloudflared/plutus.yml run plutus-saas
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

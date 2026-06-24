@@ -22,6 +22,7 @@ SAAS_PUBLIC_PATHS = frozenset({
     "/redoc",
     "/webhooks/stripe",
     "/webhooks/whcc",
+    "/webhooks/mise/gallery-published",
     "/metrics",
 })
 
@@ -29,6 +30,8 @@ SAAS_PUBLIC_UI_PREFIXES = (
     "/ui/saas",
     "/ui/saas/login",
     "/ui/saas/signup",
+    "/ui/saas/verify-email",
+    "/ui/saas/resend-verification",
     "/static/",
 )
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from . import config, db, tenants
+from . import config, db, signup_verify, tenants
 from .tenants import TenantError
 
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
@@ -70,8 +70,21 @@ def register_studio(
     )
     issued = tenants.issue_api_key(tenant_id, label="signup")
     tenant = db.get_tenant(tenant_id) or tenant
+    verify_token = signup_verify.create_pending_verification(
+        tenant_id=tenant_id,
+        email=addr,
+        api_key=issued["api_key"],
+    )
+    if verify_token:
+        signup_verify.send_verification_email(
+            tenant_id=tenant_id,
+            email=addr,
+            token=verify_token,
+        )
     return {
         "tenant": tenant,
         "api_key": issued["api_key"],
         "store_url": f"/store/{slug}",
+        "verification_required": verify_token is not None,
+        "verify_email": addr if verify_token else None,
     }

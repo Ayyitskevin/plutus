@@ -108,7 +108,12 @@ def resolve_api_key(raw_key: str | None) -> tuple[dict, str] | None:
     digest = _hash_key(raw_key)
     for candidate in db.find_tenant_by_key_prefix(prefix):
         if secrets.compare_digest(candidate["key_hash"], digest):
-            return candidate["tenant"], candidate["key_id"]
+            tenant = db.get_tenant(tenant_id) or candidate["tenant"]
+            from . import signup_verify
+
+            if not signup_verify.tenant_email_verified(tenant):
+                return None
+            return tenant, candidate["key_id"]
     return None
 
 
