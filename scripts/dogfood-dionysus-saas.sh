@@ -3,6 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-session.sh"
 
 ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env}"
 if [[ -f "$ENV_FILE" ]]; then
@@ -35,12 +37,12 @@ SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
 API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
 test -n "$API_KEY"
 echo "  tenant=$SLUG"
+dogfood_session_login "$BASE" "$API_KEY"
 
 echo "==> Upload + analyze (1 photo)"
 IMG=$(find "$DEMO_DIR" -maxdepth 1 -name '*.jpg' | sort | head -1)
 test -n "$IMG"
-UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/ui/saas/app/upload" \
-  -H "Cookie: plutus_ui_token=${API_KEY}" \
+UPLOAD_CODE=$(dogfood_ui_post -s -o /dev/null -w "%{http_code}" -X POST "$BASE/ui/saas/app/upload" \
   -F "gallery_name=Dionysus SaaS demo" \
   -F "analyze=1" \
   -F "files=@${IMG}")

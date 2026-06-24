@@ -72,7 +72,7 @@ from .. import (
     ui_sessions,
     uploads,
 )
-from ..auth import UI_TOKEN_COOKIE, require_bearer, resolve_auth
+from ..auth import require_bearer, resolve_auth
 from ..auth_context import AuthContext
 from ..metering import MeteringError
 from ..orders import OrderError, create_bundle_checkout, simulate_test_payment

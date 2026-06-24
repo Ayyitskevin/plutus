@@ -86,6 +86,18 @@ def test_signup_defers_api_key_until_verify(tmp_path, monkeypatch):
     assert verified["api_key"].startswith("plutus_tk_defer-studio_")
 
 
+def test_legacy_ui_token_cookie_not_accepted(saas_client):
+    from app import tenants
+
+    tenants.create_tenant("legacy", name="Legacy", store_slug="legacy")
+    issued = tenants.issue_api_key("legacy")
+    db.update_tenant("legacy", email_verified_at=datetime.now(UTC).isoformat())
+    saas_client.cookies.set("plutus_ui_token", issued["api_key"])
+    r = saas_client.get("/ui/saas/app", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/ui/saas/login" in r.headers["location"]
+
+
 def test_login_uses_session_cookie_not_raw_key(saas_client):
     from app import tenants
 

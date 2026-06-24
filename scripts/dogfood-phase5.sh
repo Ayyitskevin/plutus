@@ -3,6 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-session.sh"
 
 HOST="${PLUTUS_HOST:-127.0.0.1}"
 PORT="${PLUTUS_PORT:-8031}"
@@ -29,14 +31,14 @@ if [[ -z "$API_KEY" ]]; then
   exit 1
 fi
 echo "  tenant=$SLUG key=${API_KEY:0:24}..."
+dogfood_session_login "$BASE" "$API_KEY"
 
 echo "==> Upload ${LIMIT} demo photos from $DEMO_DIR"
 FILES=()
 for img in $(find "$DEMO_DIR" -maxdepth 1 -name '*.jpg' | sort | head -n "$LIMIT"); do
   FILES+=(-F "files=@${img}")
 done
-UPLOAD=$(curl -sf -X POST "$BASE/ui/saas/app/upload" \
-  -H "Cookie: plutus_ui_token=${API_KEY}" \
+UPLOAD=$(dogfood_ui_post -sf -X POST "$BASE/ui/saas/app/upload" \
   -F "gallery_name=Phase5 dogfood" \
   -F "analyze=1" \
   "${FILES[@]}" \

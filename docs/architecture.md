@@ -106,6 +106,10 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 ## Tier 11 (GitHub)
 
 - Streaming multipart uploads (`uploads.add_upload_files` → `storage.save_gallery_stream`, 1MB chunks)
+- S3 multipart transfer (`boto3` `TransferConfig`, 8MB threshold) for large gallery originals
+- Dogfood scripts use `scripts/dogfood-session.sh` (`plutus_sid` + CSRF, not raw API key cookies)
+- Postgres CI job (`.github/workflows/test.yml` → `scripts/ci-postgres.sh`)
+- Legacy `plutus_ui_token` cookie auth removed — UI uses `plutus_sid` sessions only
 
 ## Not built yet
 

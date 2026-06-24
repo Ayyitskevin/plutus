@@ -8,6 +8,8 @@ from pathlib import Path
 from . import config
 
 _UPLOAD_CHUNK_BYTES = 1024 * 1024
+_S3_MULTIPART_THRESHOLD = 8 * 1024 * 1024
+_S3_MULTIPART_CHUNK = 8 * 1024 * 1024
 
 log = logging.getLogger("plutus.storage")
 
@@ -59,6 +61,18 @@ def _s3_client():
     return boto3.client(**kwargs)
 
 
+def _s3_upload_fileobj(client, body, bucket: str, key: str) -> None:
+    from boto3.s3.transfer import TransferConfig
+
+    transfer = TransferConfig(
+        multipart_threshold=_S3_MULTIPART_THRESHOLD,
+        multipart_chunksize=_S3_MULTIPART_CHUNK,
+        max_concurrency=4,
+        use_threads=True,
+    )
+    client.upload_fileobj(body, bucket, key, Config=transfer)
+
+
 def _safe_gallery_name(filename: str) -> str:
     return Path(filename or "photo.jpg").name
 
@@ -106,7 +120,7 @@ async def save_gallery_stream(
             key = f"{gallery_prefix(tenant_id, batch_id)}/{staged.name}"
             client = _s3_client()
             with staged.open("rb") as body:
-                client.upload_fileobj(body, config.S3_BUCKET, key)
+                _s3_upload_fileobj(client, body, config.S3_BUCKET, key)
             staged.unlink(missing_ok=True)
             staged = None
             uri = f"s3://{config.S3_BUCKET}/{key}"
@@ -140,14 +154,11 @@ def save_gallery_file(
     """Persist one gallery original; returns URI (path or s3://)."""
     safe = _safe_gallery_name(filename)
     if config.STORAGE_BACKEND == "s3" and _s3_ready():
+        import io
+
         key = f"{gallery_prefix(tenant_id, batch_id)}/{safe}"
         client = _s3_client()
-        client.put_object(
-            Bucket=config.S3_BUCKET,
-            Key=key,
-            Body=data,
-            ContentType="application/octet-stream",
-        )
+        _s3_upload_fileobj(client, io.BytesIO(data), config.S3_BUCKET, key)
         uri = f"s3://{config.S3_BUCKET}/{key}"
         log.info("stored gallery file %s", uri)
         return uri

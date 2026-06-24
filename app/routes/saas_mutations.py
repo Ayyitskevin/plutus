@@ -19,7 +19,6 @@ from .. import (
     ui_sessions,
     uploads,
 )
-from ..auth import UI_TOKEN_COOKIE
 from ..auth_context import AuthContext
 from ..metering import MeteringError
 from ..sell import SellError
@@ -43,7 +42,6 @@ def ui_logout(request: Request):
     ui_sessions.delete_session(request.cookies.get(ui_sessions.UI_SESSION_COOKIE))
     response = RedirectResponse("/ui/saas/login", status_code=303)
     response.delete_cookie(ui_sessions.UI_SESSION_COOKIE)
-    response.delete_cookie(UI_TOKEN_COOKIE)
     return response
 
 

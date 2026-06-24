@@ -97,6 +97,28 @@ def saas_client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
+def test_s3_upload_uses_multipart_transfer_config(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
+    captured: dict = {}
+
+    class _FakeTransferConfig:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    with patch("boto3.s3.transfer.TransferConfig", _FakeTransferConfig):
+        with patch("app.storage._s3_client") as mock_client:
+            mock_client.return_value = MagicMock()
+            monkeypatch.setattr(config, "STORAGE_BACKEND", "s3")
+            monkeypatch.setattr(config, "S3_BUCKET", "test-bucket")
+            monkeypatch.setattr(config, "S3_ACCESS_KEY", "key")
+            monkeypatch.setattr(config, "S3_SECRET_KEY", "secret")
+            storage.save_gallery_file("t", "b", "photo.jpg", b"x" * 100)
+    assert captured.get("multipart_threshold") == 8 * 1024 * 1024
+    assert captured.get("multipart_chunksize") == 8 * 1024 * 1024
+    mock_client.return_value.upload_fileobj.assert_called_once()
+
+
 def test_ui_upload_rejects_oversized_streaming(saas_client, monkeypatch):
     from app import tenants
 

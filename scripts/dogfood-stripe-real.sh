@@ -3,6 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-session.sh"
 source .venv/bin/activate 2>/dev/null || true
 
 HOST="${PLUTUS_HOST:-127.0.0.1}"
@@ -42,11 +44,11 @@ SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
   -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
 API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
 test -n "$API_KEY"
+dogfood_session_login "$BASE" "$API_KEY"
 
 DEMO="${PLUTUS_DOGFOOD_GALLERY:-$HOME/ai-workspace/argus/data/demo}"
 IMG=$(find "$DEMO" -maxdepth 1 -name '*.jpg' | head -1)
-UPLOAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/ui/saas/app/upload" \
-  -H "Cookie: plutus_ui_token=${API_KEY}" \
+UPLOAD_CODE=$(dogfood_ui_post -s -o /dev/null -w "%{http_code}" -X POST "$BASE/ui/saas/app/upload" \
   -F "gallery_name=Stripe demo" \
   -F "files=@${IMG}")
 if [[ "$UPLOAD_CODE" != "303" && "$UPLOAD_CODE" != "200" ]]; then

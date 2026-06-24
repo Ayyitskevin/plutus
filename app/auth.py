@@ -8,8 +8,6 @@ from fastapi import Form, Header, HTTPException, Request
 from . import config, db, tenants, ui_sessions
 from .auth_context import AuthContext, set_auth_context
 
-UI_TOKEN_COOKIE = "plutus_ui_token"
-
 
 def token_from_request(
     request: Request,
@@ -21,9 +19,6 @@ def token_from_request(
         return form_token.strip()
     if authorization and authorization.startswith("Bearer "):
         return authorization.removeprefix("Bearer ").strip()
-    cookie = request.cookies.get(UI_TOKEN_COOKIE)
-    if cookie and cookie.strip():
-        return cookie.strip()
     return None
 
 
