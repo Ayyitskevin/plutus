@@ -225,6 +225,12 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `scripts/dogfood-create-tenant.sh` — dogfood tenant + API key without public signup
 - `scripts/dogfood-welcome-email.sh` — welcome email via local SMTP catcher
 
+## M9 — suite integration loop (GitHub)
+
+- `scripts/dogfood-suite-loop.sh` + `dogfood_suite_loop.py` — Mise → Argus run-all → Plutus offer → Mnemosyne share CTA
+- argus `plutus_client.create_share_link` uses `/integrations/offer` when `ARGUS_PLUTUS_TENANT_ID` set
+- mnemosyne `scripts/dogfood-plutus-prod.sh` + `dogfood-plutus-link.sh` — prod Plutus auto-link dogfood
+
 ## Not built yet
 
 - WHCC live API credentials on production fleet (HMAC + stub path ready; `scripts/wire-whcc.sh`)
