@@ -81,6 +81,42 @@ def test_checkout_webhook_event_recorded_for_dedup(tmp_path, monkeypatch, order_
     assert calls["n"] == 0
 
 
+def test_checkout_webhook_retries_when_order_unresolvable(tmp_path, monkeypatch, order_env):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
+    event = {
+        "id": "evt_checkout_fail",
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "id": "cs_missing_order",
+                "payment_intent": "pi_missing",
+                "metadata": {"checkout_kind": "client_bundle"},
+            }
+        },
+    }
+    with pytest.raises(billing.WebhookProcessingError):
+        billing.handle_webhook_event(event)
+    assert not db.is_stripe_webhook_processed("evt_checkout_fail")
+
+
+def test_deactivated_tenant_invalidates_ui_session(saas_client):
+    from app import tenants
+
+    tenants.create_tenant("off", name="Off Co", store_slug="off")
+    issued = tenants.issue_api_key("off")
+    db.update_tenant("off", email_verified_at="2026-01-01T00:00:00+00:00")
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": issued["api_key"]},
+        follow_redirects=False,
+    )
+    db.update_tenant("off", active=False)
+    r = saas_client.get("/ui/saas/app", follow_redirects=False)
+    assert r.status_code == 303
+    assert "/ui/saas/login" in r.headers["location"]
+
+
 def test_revoked_key_invalidates_ui_session(saas_client):
     from app import tenants
 

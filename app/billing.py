@@ -226,7 +226,10 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
 
     if etype == "checkout.session.completed":
         if checkout_kind == "client_bundle" or metadata.get("order_id"):
-            orders_mod.handle_checkout_completed(obj)
+            try:
+                orders_mod.handle_checkout_completed(obj)
+            except orders_mod.OrderError as exc:
+                raise WebhookProcessingError(str(exc)) from exc
         else:
             sub_id = obj.get("subscription")
             customer_id = obj.get("customer")

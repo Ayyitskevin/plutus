@@ -115,6 +115,17 @@ def test_verify_webhook_hmac_signature(monkeypatch):
     assert lab_whcc.verify_webhook_signature(body, "deadbeef" * 8) is False
 
 
+def test_whcc_saas_rejects_legacy_bearer(saas_client, monkeypatch):
+    monkeypatch.setattr(config, "WHCC_WEBHOOK_SECRET", "whcc-secret")
+    body = b'{"order_id":"x","status":"shipped"}'
+    r = saas_client.post(
+        "/webhooks/whcc",
+        headers={"Authorization": "Bearer whcc-secret"},
+        content=body,
+    )
+    assert r.status_code == 401
+
+
 def test_whcc_webhook_hmac_via_http(saas_client, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")

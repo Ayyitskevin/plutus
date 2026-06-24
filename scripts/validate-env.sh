@@ -46,6 +46,12 @@ if [[ "${PLUTUS_SAAS_MODE:-false}" == "true" ]]; then
   fi
   if [[ "${PLUTUS_RATE_LIMIT_ENABLED:-true}" == "true" ]]; then
     check_not_placeholder PLUTUS_REDIS_URL
+  else
+    echo "WARN: PLUTUS_RATE_LIMIT_ENABLED=false — per-IP/tenant limits off in SaaS"
+  fi
+  if [[ -n "${STRIPE_SECRET_KEY:-}" && -z "${STRIPE_WEBHOOK_SECRET:-}" ]]; then
+    echo "ERROR: STRIPE_SECRET_KEY set but STRIPE_WEBHOOK_SECRET unset"
+    errors=$((errors + 1))
   fi
   if [[ -n "${PLUTUS_MISE_HOOK_TOKEN:-}" ]]; then
     check_not_placeholder PLUTUS_MISE_HOOK_TENANT_ID

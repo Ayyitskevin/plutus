@@ -172,10 +172,14 @@ def test_whcc_webhook_updates_order(saas_client, tmp_path, monkeypatch):
     ref = "whcc-stub-wh-abc123"
     db.update_order(oid, lab_status="processing", lab_ref=ref)
 
+    from app import lab_whcc
+
+    body = f'{{"order_id":"{ref}","status":"shipped"}}'.encode()
+    sig = lab_whcc.whcc_webhook_signature(body, secret="whcc-secret")
     r = saas_client.post(
         "/webhooks/whcc",
-        headers={"Authorization": "Bearer whcc-secret"},
-        json={"order_id": ref, "status": "shipped"},
+        headers={"X-WHCC-Signature": f"sha256={sig}"},
+        content=body,
     )
     assert r.status_code == 200
     assert r.json()["received"] is True

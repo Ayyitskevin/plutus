@@ -82,7 +82,7 @@ def _check_memory(key: str, limit: int) -> tuple[bool, int, int, bool]:
 def _check_redis(key: str, limit: int) -> tuple[bool, int, int, bool]:
     client = redis_client.get_client()
     if client is None:
-        if redis_client.saas_redis_required():
+        if redis_client.saas_rate_limits_strict():
             return False, 60, 0, True
         return _check_memory(key, limit)
 
@@ -99,12 +99,14 @@ def _check_redis(key: str, limit: int) -> tuple[bool, int, int, bool]:
         return True, 0, max(limit - count, 0), False
     except Exception as exc:
         log.warning("redis rate-limit error (%s)", exc)
-        if redis_client.saas_redis_required():
+        if redis_client.saas_rate_limits_strict():
             return False, 60, 0, True
         return _check_memory(key, limit)
 
 
 def _check(key: str, limit: int) -> tuple[bool, int, int, bool]:
+    if config.SAAS_MODE and config.RATE_LIMIT_ENABLED:
+        return _check_redis(key, limit)
     if config.REDIS_URL:
         return _check_redis(key, limit)
     return _check_memory(key, limit)

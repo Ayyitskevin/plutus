@@ -12,8 +12,13 @@ _client = None
 _unavailable = False
 
 
+def saas_rate_limits_strict() -> bool:
+    """SaaS production rate limits must use Redis (fail closed if unavailable)."""
+    return bool(config.SAAS_MODE and config.RATE_LIMIT_ENABLED)
+
+
 def saas_redis_required() -> bool:
-    return bool(config.SAAS_MODE and config.RATE_LIMIT_ENABLED and config.REDIS_URL)
+    return saas_rate_limits_strict()
 
 
 def get_client():
@@ -60,11 +65,16 @@ def connect_required() -> None:
 
 
 def ping_status() -> dict[str, str | bool]:
+    strict = saas_rate_limits_strict()
     if not config.REDIS_URL:
-        return {"status": "disabled", "configured": False}
+        return {
+            "status": "error" if strict else "disabled",
+            "configured": False,
+            "required": strict,
+        }
     client = get_client()
     if client is None:
-        required = saas_redis_required()
+        required = strict
         return {
             "status": "error" if required else "degraded",
             "configured": True,

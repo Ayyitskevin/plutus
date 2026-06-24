@@ -62,6 +62,16 @@ def test_rate_limit_no_memory_fallback_when_saas_redis_required(monkeypatch):
     assert backend_down is True
 
 
+def test_saas_rate_limit_fails_closed_without_redis(monkeypatch):
+    monkeypatch.setattr(config, "SAAS_MODE", True)
+    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(config, "REDIS_URL", None)
+    with patch.object(redis_client, "get_client", return_value=None):
+        ok, _, _, backend_down = rate_limit._check("ip:1.2.3.4", 60)
+    assert ok is False
+    assert backend_down is True
+
+
 def test_prometheus_includes_upload_queue_gauges(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")

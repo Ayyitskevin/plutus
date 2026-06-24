@@ -206,17 +206,13 @@ def handle_checkout_completed(session: dict[str, Any]) -> None:
     if not order_id:
         order = db.get_order_by_session(session.get("id") or "")
         if not order:
-            log.warning("checkout completed without order_id metadata")
-            return
+            raise OrderError("checkout completed without resolvable order_id")
         order_id = str(order["id"])
-    try:
-        mark_order_paid(
-            int(order_id),
-            client_email=session.get("customer_details", {}).get("email"),
-            stripe_payment_intent=session.get("payment_intent"),
-        )
-    except OrderError as exc:
-        log.warning("checkout completion failed: %s", exc)
+    mark_order_paid(
+        int(order_id),
+        client_email=session.get("customer_details", {}).get("email"),
+        stripe_payment_intent=session.get("payment_intent"),
+    )
 
 
 def simulate_test_payment(

@@ -44,7 +44,7 @@ def verify_webhook_signature(payload: bytes, sig_header: str | None) -> bool:
     if not secret or not sig_header:
         return False
     normalized = sig_header.strip()
-    if normalized in {secret, f"Bearer {secret}"}:
+    if not config.SAAS_MODE and normalized in {secret, f"Bearer {secret}"}:
         return True
     digest = normalized
     lower = normalized.lower()
