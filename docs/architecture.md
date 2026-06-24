@@ -186,6 +186,13 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Admin create tenant accepts **notify email**; sends welcome email with bootstrap API key when SMTP armed
 - `notifications.send_tenant_welcome_email` — login, dashboard, storefront, getting-started steps
 
+## M5 — deploy packaging + integration offer API (GitHub)
+
+- `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `fly.toml`, `scripts/deploy-fly.sh`
+- `POST /integrations/offer` — one-shot offer mint (admin + `tenant_id` or tenant key)
+- `storefront.link_tenant_for_bearer` — shared tenant resolution for share-links + integrations
+- mnemosyne `plutus_api` calls `/integrations/offer`
+
 ## M4 — trust surface + invite polish (GitHub)
 
 - `/privacy` + `/terms` — public trust pages; linked from SaaS landing and login

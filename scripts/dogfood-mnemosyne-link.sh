@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify admin-token share-links work for mnemosyne / integration callers.
+# Verify admin-token /integrations/offer works for mnemosyne / integration callers.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -44,7 +44,7 @@ if [[ -z "$RUN_ID" ]]; then
 fi
 
 echo "==> Mint offer link (admin + tenant_id=${TENANT_ID}, run_id=${RUN_ID})"
-LINK_JSON=$(curl -sf -X POST "$BASE/storefront/share-links" \
+LINK_JSON=$(curl -sf -X POST "$BASE/integrations/offer" \
   -H "Authorization: Bearer ${TOKEN}" \
   -d "run_id=${RUN_ID}&tenant_id=${TENANT_ID}&label=Mnemosyne+integration+test")
 OFFER_URL=$(echo "$LINK_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['public_url'])")

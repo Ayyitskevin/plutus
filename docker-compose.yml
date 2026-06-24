@@ -1,0 +1,16 @@
+services:
+  plutus:
+    build: .
+    ports:
+      - "${PLUTUS_PORT:-8031}:8031"
+    env_file:
+      - .env
+    environment:
+      PLUTUS_SAAS_MODE: "true"
+      PLUTUS_DATA_DIR: /data
+    volumes:
+      - plutus-data:/data
+    restart: unless-stopped
+
+volumes:
+  plutus-data:

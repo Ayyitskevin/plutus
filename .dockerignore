@@ -1,0 +1,13 @@
+.venv
+.git
+.github
+data
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+tests
+*.db
+.env
+.env.*
+!.env.saas.example

@@ -12,6 +12,19 @@ class StorefrontError(Exception):
     """Storefront access or checkout failure."""
 
 
+def link_tenant_for_bearer(ctx, tenant_id: str | None = None) -> str:
+    """Resolve which tenant owns a share-link mint for this Bearer context."""
+    from . import config, homelab
+
+    link_tenant = ctx.tenant_id
+    if not link_tenant and ctx.is_admin:
+        if homelab.store_enabled():
+            link_tenant = homelab.tenant_id()
+        else:
+            link_tenant = (tenant_id or "").strip() or config.MISE_HOOK_TENANT_ID
+    return link_tenant or ""
+
+
 def public_offer_url(store_slug: str, token: str) -> str:
     base = config.SAAS_PUBLIC_URL.rstrip("/")
     return f"{base}/store/{store_slug}/offer/{token}"

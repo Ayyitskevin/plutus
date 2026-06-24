@@ -13,6 +13,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(webhooks_router)
     from .storefront import router as storefront_router
     app.include_router(storefront_router)
+    from .integrations import router as integrations_router
+    app.include_router(integrations_router)
     from .homelab_ui import router as homelab_ui_router
     app.include_router(homelab_ui_router)
     from .saas_public import router as saas_public_router

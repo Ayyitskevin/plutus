@@ -26,7 +26,12 @@ from ..gallery_media import (
     resolve_photo_file,
 )
 from ..orders import OrderError, create_bundle_checkout, simulate_test_payment
-from ..storefront import StorefrontError, create_share_link, resolve_offer
+from ..storefront import (
+    StorefrontError,
+    create_share_link,
+    link_tenant_for_bearer,
+    resolve_offer,
+)
 from .deps import (
     templates,
     ui_context,
@@ -218,17 +223,12 @@ def api_create_share_link(
     tenant_id: str | None = Form(None),
     ctx: AuthContext = Depends(require_bearer),
 ) -> JSONResponse:
-    link_tenant = ctx.tenant_id
-    if not link_tenant and ctx.is_admin:
-        if homelab.store_enabled():
-            link_tenant = homelab.tenant_id()
-        else:
-            link_tenant = (tenant_id or "").strip() or config.MISE_HOOK_TENANT_ID
+    link_tenant = link_tenant_for_bearer(ctx, tenant_id)
     if not link_tenant:
-            raise HTTPException(
-                status_code=403,
-                detail="tenant API key required (or admin with tenant_id)",
-            )
+        raise HTTPException(
+            status_code=403,
+            detail="tenant API key required (or admin with tenant_id)",
+        )
     try:
         link = create_share_link(
             tenant_id=link_tenant,
