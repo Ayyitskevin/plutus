@@ -31,6 +31,31 @@ def test_invoice_payment_failed_marks_past_due(saas_db):
     assert tenant["active"] is False
 
 
+def test_checkout_subscription_activates_tenant(saas_db):
+    tenants.create_tenant("subco", name="Sub Co", store_slug="sub-co")
+    billing.handle_webhook_event(
+        {
+            "id": "evt_sub_checkout",
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "id": "cs_sub",
+                    "customer": "cus_new",
+                    "subscription": "sub_new",
+                    "metadata": {
+                        "tenant_id": "subco",
+                        "checkout_kind": "tenant_subscription",
+                    },
+                }
+            },
+        }
+    )
+    tenant = db.get_tenant("subco")
+    assert tenant["billing_status"] == "active"
+    assert tenant["plan_tier"] == "pro"
+    assert tenant["monthly_recommend_cap"] == 500
+
+
 def test_subscription_updated_resolves_by_customer_id(saas_db):
     tenants.create_tenant("subco", name="Sub Co", store_slug="sub-co")
     db.update_tenant("subco", stripe_customer_id="cus_sub_99")

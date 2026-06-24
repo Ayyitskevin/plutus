@@ -753,6 +753,8 @@ def ui_saas_signup_post(
             tenant=result["tenant"],
             api_key=api_key,
             store_url=result["store_url"],
+            trial_days=config.SIGNUP_TRIAL_DAYS,
+            trial_cap=config.SIGNUP_TRIAL_RECOMMEND_CAP,
         ),
     )
     response.set_cookie(

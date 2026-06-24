@@ -8,7 +8,12 @@
 <div class="card">
   <p><strong>Storefront:</strong> <a href="{{ store_url }}">{{ store_url }}</a></p>
   <p class="small">Upload a gallery to get vision-aware print bundles, then share an offer link with clients.</p>
-  <a class="btn" href="/ui/saas/app/upload">Upload your first gallery</a>
+  <p class="small">Trial: {{ trial_days }} days · {{ trial_cap }} recommends/month until you subscribe.</p>
+  <a class="btn" href="/ui/saas/app/sell">Publish &amp; sell</a>
+  <a class="btn secondary" href="/ui/saas/app/upload" style="margin-left:.5rem">Upload</a>
+  {% if billing_enabled %}
+  <a class="btn secondary" href="/ui/saas/billing" style="margin-left:.5rem">Upgrade to Pro</a>
+  {% endif %}
   <a class="btn secondary" href="/ui/saas/app" style="margin-left:.5rem">Dashboard</a>
 </div>
 {% endblock %}
