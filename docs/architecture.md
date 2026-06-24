@@ -146,7 +146,8 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 
 - `scripts/sync-flow-mise-plutus.sh` — push `MISE_PLUTUS_*` from plutus `.env` → flow `/opt/mise/.env`
 - `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
-- Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
+- Flow publish → Plutus SaaS `:8031` via hook token (`PLUTUS_MISE_HOOK_TOKEN` synced as `MISE_PLUTUS_TOKEN`)
+- `/recommend/mise-gallery` accepts the hook secret (same as `/webhooks/mise/gallery-published`) so legacy Mise callers work without a separate webhook path
 
 ## Tier 20 (photographer order ops)
 

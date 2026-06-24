@@ -90,3 +90,20 @@ def test_mise_webhook_rejects_admin_token(saas_client):
         headers={"Authorization": "Bearer hook-admin"},
     )
     assert r.status_code == 401
+
+
+def test_recommend_mise_gallery_accepts_hook_token(saas_client, tmp_path):
+    """Flow Mise posts the hook secret to /recommend/mise-gallery (not the webhook)."""
+    row = _gallery_folder(tmp_path)
+    with patch("app.mise_client.get_gallery", return_value=row):
+        with patch("app.mise_client.is_enabled", return_value=True):
+            r = saas_client.post(
+                "/recommend/mise-gallery",
+                data={"mise_gallery_id": 3},
+                headers={"Authorization": "Bearer hook-secret"},
+            )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["run_id"] >= 1
+    run = db.get_run(body["run_id"], tenant_id="flow-studio")
+    assert run is not None

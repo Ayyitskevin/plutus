@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -15,12 +16,23 @@ from .. import (
     uploads,
 )
 from ..async_io import run_sync
-from ..auth import require_bearer
+from ..auth import require_bearer, token_from_request, verify_api_access
 from ..auth_context import AuthContext
 from ..metering import MeteringError
 
 log = logging.getLogger("plutus")
 router = APIRouter()
+
+def _mise_recommend_uses_hook_token(request: Request) -> bool:
+    """Flow Mise posts the dedicated hook secret to /recommend/mise-gallery."""
+    expected = config.MISE_HOOK_TOKEN
+    if not (config.SAAS_MODE and expected):
+        return False
+    provided = token_from_request(
+        request, authorization=request.headers.get("Authorization")
+    )
+    return bool(provided and secrets.compare_digest(provided, expected))
+
 
 @router.post("/recommend/mise-gallery")
 async def recommend_mise_gallery_api(
@@ -29,10 +41,33 @@ async def recommend_mise_gallery_api(
     limit: int | None = Form(None),
     argus_run_id: int | None = Form(None),
     tenant_id: str | None = Form(None),
-    ctx: AuthContext = Depends(require_bearer),
 ) -> JSONResponse:
     from .. import mise_hook
 
+    if _mise_recommend_uses_hook_token(request):
+        scope = mise_hook.resolve_hook_tenant_id(tenant_id, from_webhook=True)
+        result = await run_sync(
+            mise_hook.recommend_published_gallery,
+            mise_gallery_id=mise_gallery_id,
+            tenant_id=scope,
+            argus_run_id=argus_run_id,
+            limit=limit,
+            from_webhook=True,
+        )
+        if scope:
+            metrics.inc_tenant(scope, "recommend_mise")
+            audit.record(
+                "recommend.mise.hook",
+                request=request,
+                tenant_id=scope,
+                resource=str(result["run_id"]),
+                detail={"mise_gallery_id": mise_gallery_id, "via": "recommend"},
+            )
+        return JSONResponse(result)
+
+    ctx = verify_api_access(
+        request, authorization=request.headers.get("Authorization")
+    )
     if config.SAAS_MODE and ctx.is_admin:
         scope = mise_hook.resolve_hook_tenant_id(tenant_id)
     elif config.SAAS_MODE:
