@@ -69,15 +69,10 @@ def _order_recipients(tenant: dict) -> list[str]:
 
 
 def _bundle_title_for_order(order: dict) -> str | None:
+    from .order_views import bundle_title_for_order
+
     run = db.get_run(int(order["run_id"]), tenant_id=order["tenant_id"])
-    if not run:
-        return None
-    bundles = (run.get("payload") or {}).get("bundles") or []
-    idx = int(order.get("bundle_index") or 0)
-    if 0 <= idx < len(bundles):
-        title = bundles[idx].get("title")
-        return title if title else None
-    return None
+    return bundle_title_for_order(order, run)
 
 
 def _client_confirmation_body(order: dict, tenant: dict) -> str:
@@ -103,6 +98,24 @@ def _client_confirmation_body(order: dict, tenant: dict) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def resend_client_confirmation(order_id: int) -> bool:
+    """Re-send the client order confirmation email for a paid order."""
+    order = db.get_order(order_id)
+    if not order or order.get("status") != "paid":
+        return False
+    if not order.get("client_email") or not order.get("client_token"):
+        return False
+    if not smtp_ready():
+        return False
+    tenant = db.get_tenant(order["tenant_id"]) or {}
+    studio = tenant.get("name") or order["tenant_id"]
+    return _send_email(
+        to=order["client_email"],
+        subject=f"Order confirmed — {studio}",
+        body=_client_confirmation_body(order, tenant),
+    )
 
 
 def send_test_email(*, to: str, tenant: dict) -> bool:

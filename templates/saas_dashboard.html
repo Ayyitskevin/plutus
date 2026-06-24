@@ -149,11 +149,12 @@
   <h3 style="margin-top:0">Recent orders</h3>
   {% if orders %}
   <table>
-    <tr><th>ID</th><th>Run</th><th>Total</th><th>Status</th><th>Created</th></tr>
+    <tr><th>ID</th><th>Client</th><th>Package</th><th>Total</th><th>Status</th><th>Created</th></tr>
     {% for o in orders %}
     <tr>
       <td><a href="/ui/saas/app/orders/{{ o.id }}">{{ o.id }}</a></td>
-      <td>{{ o.run_id }}</td>
+      <td class="small">{{ o.client_name or o.client_email or '—' }}</td>
+      <td class="small">{{ o.bundle_title or ('Bundle #' ~ o.bundle_index) }}</td>
       <td>{{ o.total_cents|money }}</td>
       <td>{{ o.status }}{% if o.lab_status %} · {{ o.lab_status }}{% endif %}</td>
       <td class="small">{{ o.created_at }}</td>

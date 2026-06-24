@@ -34,6 +34,7 @@ from .deps import (
     templates,
     tenant_ui_redirect,
     ui_context,
+    ui_saas_auth,
 )
 
 log = logging.getLogger("plutus")
@@ -93,6 +94,57 @@ def ui_saas_notifications_test(request: Request):
             status_code=303,
         )
     return RedirectResponse("/ui/saas/app?notification_test_sent=1", status_code=303)
+
+
+@router.post("/ui/saas/app/orders/{order_id}/poll-lab")
+def ui_saas_order_poll_lab(request: Request, order_id: int):
+    ctx = ui_saas_auth(request)
+    if ctx is None:
+        return RedirectResponse("/ui/saas/login", status_code=303)
+    tenant_id = None if ctx.is_admin else ctx.tenant_id
+    order = db.get_order(order_id, tenant_id=tenant_id)
+    if not order:
+        return RedirectResponse("/ui/saas/app?order_error=order+not+found", status_code=303)
+    from .. import lab
+
+    try:
+        lab.poll_order(order_id)
+    except lab.LabError:
+        return RedirectResponse(
+            f"/ui/saas/app/orders/{order_id}?order_error=lab+poll+failed",
+            status_code=303,
+        )
+    audit.record("order.lab.poll", request=request, ctx=ctx, resource=str(order_id))
+    return RedirectResponse(f"/ui/saas/app/orders/{order_id}?lab_polled=1", status_code=303)
+
+
+@router.post("/ui/saas/app/orders/{order_id}/resend-confirmation")
+def ui_saas_order_resend_confirmation(request: Request, order_id: int):
+    ctx = ui_saas_auth(request)
+    if ctx is None:
+        return RedirectResponse("/ui/saas/login", status_code=303)
+    tenant_id = None if ctx.is_admin else ctx.tenant_id
+    order = db.get_order(order_id, tenant_id=tenant_id)
+    if not order:
+        return RedirectResponse("/ui/saas/app?order_error=order+not+found", status_code=303)
+    if not notifications.smtp_ready():
+        return RedirectResponse(
+            f"/ui/saas/app/orders/{order_id}?order_error=smtp+not+configured",
+            status_code=303,
+        )
+    if not order.get("client_email"):
+        return RedirectResponse(
+            f"/ui/saas/app/orders/{order_id}?order_error=no+client+email",
+            status_code=303,
+        )
+    sent = notifications.resend_client_confirmation(order_id)
+    audit.record("order.client.resend", request=request, ctx=ctx, resource=str(order_id))
+    if not sent:
+        return RedirectResponse(
+            f"/ui/saas/app/orders/{order_id}?order_error=resend+failed",
+            status_code=303,
+        )
+    return RedirectResponse(f"/ui/saas/app/orders/{order_id}?resent=1", status_code=303)
 
 
 @router.post("/ui/saas/app/admin/tenants")

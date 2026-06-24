@@ -148,6 +148,14 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
 - Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
 
+## Tier 20 (photographer order ops)
+
+- Order detail shows bundle hero, photo thumbnails, client track link with copy button
+- `POST /ui/saas/app/orders/{id}/poll-lab` — refresh mock/WHCC fulfillment status
+- `POST /ui/saas/app/orders/{id}/resend-confirmation` — re-send client confirmation when SMTP armed
+- Token-scoped order photos: `GET /ui/saas/app/orders/{id}/photo/{filename}`
+- Dashboard orders table shows client name and bundle title
+
 ## Tier 19 (SMTP notifications)
 
 - Richer client confirmation email — bundle title, line items, total, tracking link

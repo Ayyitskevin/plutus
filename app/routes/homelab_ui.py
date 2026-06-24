@@ -4,8 +4,14 @@ import logging
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 
 from .. import (
     audit,
@@ -13,11 +19,20 @@ from .. import (
     db,
     homelab,
     lab,
+    notifications,
     pitch,
     saas,
     service,
 )
 from ..bundle_editor import BundleEditError, photos_for_run, save_run_edits
+from ..gallery_media import (
+    FULL_MAX_EDGE,
+    THUMB_MAX_EDGE,
+    GalleryMediaError,
+    render_jpeg,
+    resolve_photo_file,
+)
+from ..order_views import enrich_order_bundle
 from ..storefront import StorefrontError, create_share_link
 from .deps import (
     request_auth,
@@ -28,15 +43,13 @@ from .deps import (
 log = logging.getLogger("plutus")
 router = APIRouter()
 
+
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
     if config.SAAS_MODE:
         return RedirectResponse("/ui/saas", status_code=302)
     runs = db.list_runs(limit=10)
-    return templates.TemplateResponse(
-        request, "index.html", {"runs": runs, "title": "upsell"}
-    )
-
+    return templates.TemplateResponse(request, "index.html", {"runs": runs, "title": "upsell"})
 
 
 @router.post("/analyze", response_class=HTMLResponse)
@@ -51,9 +64,7 @@ def analyze_form(
         raise HTTPException(status_code=403, detail="use tenant portal in SaaS mode")
     path = Path(folder).expanduser()
     try:
-        result = service.analyze_folder(
-            path, name=name, argus_run_id=argus_run_id, limit=limit
-        )
+        result = service.analyze_folder(path, name=name, argus_run_id=argus_run_id, limit=limit)
     except FileNotFoundError:
         return templates.TemplateResponse(
             request,
@@ -62,7 +73,6 @@ def analyze_form(
             status_code=400,
         )
     return RedirectResponse(f"/runs/{result['run_id']}", status_code=303)
-
 
 
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -89,7 +99,8 @@ def view_run(request: Request, run_id: int):
     return templates.TemplateResponse(
         request,
         "run.html",
-        ui_context(request, 
+        ui_context(
+            request,
             run=row,
             bundles=payload.get("bundles") or [],
             top_photos=payload.get("top_photos") or [],
@@ -104,7 +115,6 @@ def view_run(request: Request, run_id: int):
             else (db.get_tenant(homelab.tenant_id()) if homelab.store_enabled() else None),
         ),
     )
-
 
 
 def _run_edit_context(request: Request, run_id: int, **extra):
@@ -176,7 +186,6 @@ def run_json(request: Request, run_id: int):
     return row
 
 
-
 @router.get("/runs/{run_id}/pitch.txt", response_class=PlainTextResponse)
 def run_pitch(request: Request, run_id: int):
     ctx = request_auth(request)
@@ -193,9 +202,6 @@ def run_pitch(request: Request, run_id: int):
         gallery_theme=payload.get("gallery_theme"),
         argus_run_id=row.get("argus_run_id"),
     )
-
-
-
 
 
 @router.post("/ui/homelab/share-link")
@@ -229,7 +235,6 @@ def ui_homelab_create_share_link(
     )
 
 
-
 @router.get("/ui/homelab/orders/{order_id}", response_class=HTMLResponse)
 def ui_homelab_order_detail(request: Request, order_id: int):
     if not homelab.store_enabled():
@@ -245,17 +250,102 @@ def ui_homelab_order_detail(request: Request, order_id: int):
     order = db.get_order(order_id, tenant_id=tenant_id) or order
     tenant = db.get_tenant(tenant_id)
     run = db.get_run(int(order["run_id"]), tenant_id=tenant_id)
+    bundle_display = enrich_order_bundle(
+        order,
+        run,
+        photo_base=f"/ui/homelab/orders/{order_id}/photo",
+    )
     return templates.TemplateResponse(
         request,
         "saas_order.html",
-        ui_context(request, 
+        ui_context(
+            request,
             title=f"Order {order_id}",
             order=order,
             tenant=tenant,
             run=run,
+            bundle_display=bundle_display,
             is_admin=False,
+            smtp_ready=notifications.smtp_ready(),
             fulfillment_events=db.list_fulfillment_events(order_id),
+            order_message="Lab status refreshed."
+            if request.query_params.get("lab_polled")
+            else "Client confirmation resent."
+            if request.query_params.get("resent")
+            else None,
+            order_error=request.query_params.get("order_error"),
         ),
     )
 
 
+@router.get("/ui/homelab/orders/{order_id}/photo/{filename}")
+def ui_homelab_order_photo(order_id: int, filename: str, size: str = Query("thumb")):
+    if not homelab.store_enabled():
+        raise HTTPException(status_code=404, detail="homelab storefront not enabled")
+    tenant_id = homelab.tenant_id()
+    order = db.get_order(order_id, tenant_id=tenant_id)
+    if not order:
+        return Response(status_code=404)
+    run = db.get_run(int(order["run_id"]), tenant_id=tenant_id)
+    if not run:
+        return Response(status_code=404)
+    gallery = db.get_gallery(int(run["gallery_id"]))
+    try:
+        path = resolve_photo_file(
+            gallery=gallery,
+            payload=run["payload"],
+            filename=filename,
+        )
+        max_edge = FULL_MAX_EDGE if size == "full" else THUMB_MAX_EDGE
+        data = render_jpeg(path, max_edge=max_edge)
+    except GalleryMediaError:
+        return Response(status_code=404)
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.post("/ui/homelab/orders/{order_id}/poll-lab")
+def ui_homelab_order_poll_lab(order_id: int):
+    if not homelab.store_enabled():
+        raise HTTPException(status_code=404, detail="homelab storefront not enabled")
+    tenant_id = homelab.tenant_id()
+    order = db.get_order(order_id, tenant_id=tenant_id)
+    if not order:
+        return RedirectResponse("/?order_error=order+not+found", status_code=303)
+    try:
+        lab.poll_order(order_id)
+    except lab.LabError:
+        return RedirectResponse(
+            f"/ui/homelab/orders/{order_id}?order_error=lab+poll+failed",
+            status_code=303,
+        )
+    return RedirectResponse(f"/ui/homelab/orders/{order_id}?lab_polled=1", status_code=303)
+
+
+@router.post("/ui/homelab/orders/{order_id}/resend-confirmation")
+def ui_homelab_order_resend_confirmation(order_id: int):
+    if not homelab.store_enabled():
+        raise HTTPException(status_code=404, detail="homelab storefront not enabled")
+    tenant_id = homelab.tenant_id()
+    order = db.get_order(order_id, tenant_id=tenant_id)
+    if not order:
+        return RedirectResponse("/?order_error=order+not+found", status_code=303)
+    if not notifications.smtp_ready():
+        return RedirectResponse(
+            f"/ui/homelab/orders/{order_id}?order_error=smtp+not+configured",
+            status_code=303,
+        )
+    if not order.get("client_email"):
+        return RedirectResponse(
+            f"/ui/homelab/orders/{order_id}?order_error=no+client+email",
+            status_code=303,
+        )
+    if not notifications.resend_client_confirmation(order_id):
+        return RedirectResponse(
+            f"/ui/homelab/orders/{order_id}?order_error=resend+failed",
+            status_code=303,
+        )
+    return RedirectResponse(f"/ui/homelab/orders/{order_id}?resent=1", status_code=303)

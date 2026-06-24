@@ -1,20 +1,79 @@
 {% extends "base.html" %}
 {% block body %}
+<style>
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+  .small { font-size: .85rem; color: var(--muted); }
+  .secondary { background: #eee; color: var(--ink); }
+  .status-ok { color: var(--accent); }
+  .status-err { color: #a11; }
+  .inline-form { display: inline; }
+  .order-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: start;
+  }
+  @media (max-width: 720px) { .order-hero { grid-template-columns: 1fr; } }
+  .order-hero img {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #f0ede6;
+  }
+  .bundle-item {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+    gap: .75rem;
+    align-items: center;
+    padding: .55rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .bundle-item:first-child { border-top: 0; padding-top: 0; }
+  .bundle-item img {
+    width: 72px;
+    height: 54px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+  .track-box {
+    margin-top: .75rem;
+    padding: .75rem .9rem;
+    background: #f6f8fa;
+    border: 1px solid #dde3ea;
+    border-radius: 8px;
+  }
+  .track-box code { word-break: break-all; font-size: .82rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+</style>
+
 <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Order #{{ order.id }}</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+    <div>
+      <h2 style="margin:0">Order #{{ order.id }}</h2>
+      <p class="small" style="margin:.35rem 0 0">
+        {% if tenant %}{{ tenant.name }} · {% endif %}
+        Status <strong>{{ order.status }}</strong>
+        {% if order.paid_at %} · paid {{ order.paid_at }}{% endif %}
+        {% if bundle_display and bundle_display.title %} · {{ bundle_display.title }}{% endif %}
+      </p>
+    </div>
     <a class="btn secondary" href="{% if homelab_store %}/runs/{{ order.run_id }}{% elif is_admin %}/ui/saas/app/admin{% else %}/ui/saas/app{% endif %}">← Back</a>
   </div>
-  <p class="small">
-    {% if tenant %}{{ tenant.name }} · {% endif %}
-    Status <strong>{{ order.status }}</strong>
-    {% if order.paid_at %} · paid {{ order.paid_at }}{% endif %}
-  </p>
+  {% if order_message %}<p class="status-ok" style="margin:.75rem 0 0">{{ order_message }}</p>{% endif %}
+  {% if order_error %}<p class="status-err" style="margin:.75rem 0 0">{{ order_error|replace('+', ' ') }}</p>{% endif %}
   {% if order.client_token and order.status == 'paid' %}
-  <p class="small" style="margin-top:.5rem">
-    Client track link:
-    <a href="{{ public_base }}/store/order/track/{{ order.client_token }}">{{ public_base }}/store/order/track/{{ order.client_token }}</a>
-  </p>
+  <div class="track-box">
+    <p class="small" style="margin:0 0 .5rem"><strong>Client track link</strong> — share with your client for fulfillment updates:</p>
+    <code id="track-url">{{ public_base }}/store/order/track/{{ order.client_token }}</code>
+    <div class="actions">
+      <button type="button" class="secondary" id="copy-track">Copy link</button>
+      <a class="btn secondary" href="{{ public_base }}/store/order/track/{{ order.client_token }}" target="_blank" rel="noopener">Open</a>
+    </div>
+  </div>
   {% endif %}
 </div>
 
@@ -23,45 +82,80 @@
     <h3 style="margin-top:0">Client</h3>
     <p>{{ order.client_name or '—' }}</p>
     <p class="small">{{ order.client_email or 'no email' }}</p>
+    {% if order.status == 'paid' and order.client_email %}
+    <form method="post" action="{% if homelab_store %}/ui/homelab/orders/{{ order.id }}/resend-confirmation{% else %}/ui/saas/app/orders/{{ order.id }}/resend-confirmation{% endif %}" class="inline-form" style="margin-top:.75rem">
+      {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+      <button type="submit" class="secondary" {% if not smtp_ready %}disabled title="SMTP not configured"{% endif %}>Resend confirmation</button>
+    </form>
+    {% if not smtp_ready %}<p class="small" style="margin:.35rem 0 0">SMTP not configured — confirmation emails won't send yet.</p>{% endif %}
+    {% endif %}
   </div>
-<div class="card">
-  <h3 style="margin-top:0">Fulfillment</h3>
-  <p>Lab: <strong>{{ order.lab_status or 'pending' }}</strong></p>
-  <p class="small">Ref: {{ order.lab_ref or '—' }}</p>
-  <p class="small">Run <a href="/runs/{{ order.run_id }}">#{{ order.run_id }}</a> · bundle {{ order.bundle_index }}</p>
-  {% if fulfillment_events %}
-  <table style="margin-top:.75rem">
-    <tr><th>Time</th><th>Status</th><th>Detail</th></tr>
-    {% for e in fulfillment_events %}
-    <tr>
-      <td class="small">{{ e.created_at }}</td>
-      <td>{{ e.status }}</td>
-      <td class="small">{{ e.detail or '—' }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% endif %}
-</div>
+  <div class="card">
+    <h3 style="margin-top:0">Fulfillment</h3>
+    <p>Lab: <strong>{{ order.lab_status or 'pending' }}</strong></p>
+    <p class="small">Ref: {{ order.lab_ref or '—' }}</p>
+    <p class="small">Run <a href="/runs/{{ order.run_id }}">#{{ order.run_id }}</a> · bundle {{ order.bundle_index }}</p>
+    <form method="post" action="{% if homelab_store %}/ui/homelab/orders/{{ order.id }}/poll-lab{% else %}/ui/saas/app/orders/{{ order.id }}/poll-lab{% endif %}" class="inline-form actions">
+      {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+      <button type="submit" class="secondary">Refresh lab status</button>
+    </form>
+    {% if fulfillment_events %}
+    <table style="margin-top:.75rem;width:100%">
+      <tr><th>Time</th><th>Status</th><th>Detail</th></tr>
+      {% for e in fulfillment_events %}
+      <tr>
+        <td class="small">{{ e.created_at }}</td>
+        <td>{{ e.status }}</td>
+        <td class="small">{{ e.detail or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0">Line items</h3>
-  <table>
-    <tr><th>SKU</th><th>Label</th><th>Qty</th><th>Unit</th><th>Line</th></tr>
-    {% for item in order['items'] %}
-    <tr>
-      <td class="small"><code>{{ item.sku }}</code></td>
-      <td>{{ item.label }}</td>
-      <td>{{ item.quantity }}</td>
-      <td>{{ item.unit_cents|money }}</td>
-      <td>{{ (item.unit_cents * item.quantity)|money }}</td>
-    </tr>
+  <h3 style="margin-top:0">Package</h3>
+  {% if bundle_display and bundle_display.hero_thumb_url %}
+  <div class="order-hero" style="margin-bottom:1rem">
+    <img src="{{ bundle_display.hero_thumb_url }}" alt="{{ bundle_display.title or 'Package' }}" loading="lazy">
+    <div>
+      {% if bundle_display.title %}<h4 style="margin:0 0 .35rem">{{ bundle_display.title }}</h4>{% endif %}
+      {% if bundle_display.pitch %}<p class="small" style="margin:0">{{ bundle_display.pitch }}</p>{% endif %}
+      <p style="margin:.75rem 0 0"><strong>{{ order.total_cents|money }}</strong></p>
+    </div>
+  </div>
+  {% endif %}
+  <div>
+    {% if bundle_display and bundle_display.line_items %}
+    {% for item in bundle_display.line_items %}
+    <div class="bundle-item">
+      {% if item.thumb_url %}
+      <img src="{{ item.thumb_url }}" alt="{{ item.label }}" loading="lazy">
+      {% else %}
+      <div></div>
+      {% endif %}
+      <div>
+        <strong>{{ item.label }}</strong>
+        <div class="small"><code>{{ item.sku }}</code> · qty {{ item.quantity }}</div>
+      </div>
+      <div>{{ (item.unit_cents * item.quantity)|money }}</div>
+    </div>
     {% endfor %}
-    <tr>
-      <td colspan="4" style="text-align:right"><strong>Total</strong></td>
-      <td><strong>{{ order.total_cents|money }}</strong></td>
-    </tr>
-  </table>
+    {% else %}
+    {% for item in order['items'] %}
+    <div class="bundle-item">
+      <div></div>
+      <div>
+        <strong>{{ item.label }}</strong>
+        <div class="small"><code>{{ item.sku }}</code> · qty {{ item.quantity }}</div>
+      </div>
+      <div>{{ (item.unit_cents * item.quantity)|money }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  <p style="margin:1rem 0 0;text-align:right"><strong>Total {{ order.total_cents|money }}</strong></p>
 </div>
 
 {% if run %}
@@ -69,5 +163,24 @@
   <h3 style="margin-top:0">Gallery context</h3>
   <p class="small">{{ run.bundle_count }} bundles · est. {{ run.estimated_total_cents|money }} · engine {{ run.engine }}</p>
 </div>
+{% endif %}
+
+{% if order.client_token and order.status == 'paid' %}
+<script>
+(function () {
+  var btn = document.getElementById('copy-track');
+  var el = document.getElementById('track-url');
+  if (!btn || !el) return;
+  btn.addEventListener('click', function () {
+    var text = el.textContent.trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copied!';
+        setTimeout(function () { btn.textContent = 'Copy link'; }, 1500);
+      });
+    }
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

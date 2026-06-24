@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from .. import (
     catalog,
@@ -13,6 +13,14 @@ from .. import (
     notifications,
 )
 from ..auth_context import AuthContext
+from ..gallery_media import (
+    FULL_MAX_EDGE,
+    THUMB_MAX_EDGE,
+    GalleryMediaError,
+    render_jpeg,
+    resolve_photo_file,
+)
+from ..order_views import bundle_title_for_order, enrich_order_bundle
 from .deps import (
     admin_tenant_context,
     admin_ui_redirect,
@@ -46,7 +54,12 @@ def ui_saas_tenant_app(request: Request):
         item = dict(row)
         item["is_current"] = item["id"] == ctx.api_key_id
         tenant_keys.append(item)
-    orders_list = db.list_orders(tenant_id=ctx.tenant_id, limit=10)
+    orders_list = []
+    for row in db.list_orders(tenant_id=ctx.tenant_id, limit=10):
+        item = dict(row)
+        run = db.get_run(int(row["run_id"]), tenant_id=ctx.tenant_id)
+        item["bundle_title"] = bundle_title_for_order(row, run)
+        orders_list.append(item)
     tenant = db.get_tenant(ctx.tenant_id) or ctx.tenant
     return templates.TemplateResponse(
         request,
@@ -278,6 +291,11 @@ def ui_saas_order_detail(request: Request, order_id: int):
     order = db.get_order(order_id, tenant_id=tenant_id) or order
     tenant = db.get_tenant(order["tenant_id"])
     run = db.get_run(int(order["run_id"]), tenant_id=order["tenant_id"])
+    bundle_display = enrich_order_bundle(
+        order,
+        run,
+        photo_base=f"/ui/saas/app/orders/{order_id}/photo",
+    )
     return templates.TemplateResponse(
         request,
         "saas_order.html",
@@ -286,9 +304,47 @@ def ui_saas_order_detail(request: Request, order_id: int):
             order=order,
             tenant=tenant,
             run=run,
+            bundle_display=bundle_display,
             is_admin=ctx.is_admin,
+            smtp_ready=notifications.smtp_ready(),
             fulfillment_events=db.list_fulfillment_events(order_id),
+            order_message="Lab status refreshed."
+            if request.query_params.get("lab_polled")
+            else "Client confirmation resent."
+            if request.query_params.get("resent")
+            else None,
+            order_error=request.query_params.get("order_error"),
         ),
+    )
+
+
+@router.get("/ui/saas/app/orders/{order_id}/photo/{filename}")
+def ui_saas_order_photo(request: Request, order_id: int, filename: str, size: str = Query("thumb")):
+    ctx = ui_saas_auth(request)
+    if ctx is None:
+        return Response(status_code=401)
+    tenant_id = None if ctx.is_admin else ctx.tenant_id
+    order = db.get_order(order_id, tenant_id=tenant_id)
+    if not order:
+        return Response(status_code=404)
+    run = db.get_run(int(order["run_id"]), tenant_id=order["tenant_id"])
+    if not run:
+        return Response(status_code=404)
+    gallery = db.get_gallery(int(run["gallery_id"]))
+    try:
+        path = resolve_photo_file(
+            gallery=gallery,
+            payload=run["payload"],
+            filename=filename,
+        )
+        max_edge = FULL_MAX_EDGE if size == "full" else THUMB_MAX_EDGE
+        data = render_jpeg(path, max_edge=max_edge)
+    except GalleryMediaError:
+        return Response(status_code=404)
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
     )
 
 

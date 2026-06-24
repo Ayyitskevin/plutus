@@ -13,6 +13,8 @@ CSRF_POSTS = {
     "/ui/logout",
     "/ui/saas/app/settings",
     "/ui/saas/app/notifications/test",
+    "/ui/saas/app/orders/{order_id}/poll-lab",
+    "/ui/saas/app/orders/{order_id}/resend-confirmation",
     "/ui/saas/app/admin/tenants",
     "/ui/saas/app/admin/tenants/{tenant_id}",
     "/ui/saas/app/admin/tenants/{tenant_id}/keys",

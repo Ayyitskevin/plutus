@@ -21,6 +21,16 @@ class GalleryMediaError(Exception):
     """Photo lookup or render failure."""
 
 
+def photo_filename(photo: Any) -> str | None:
+    if isinstance(photo, str):
+        name = photo.strip()
+        return name or None
+    if isinstance(photo, dict):
+        fn = photo.get("filename")
+        return str(fn) if fn else None
+    return None
+
+
 def _safe_filename(name: str) -> str:
     base = Path(name or "").name
     if not base or base in {".", ".."} or base != name.strip():
@@ -32,9 +42,9 @@ def filenames_in_run(payload: dict[str, Any]) -> set[str]:
     names: set[str] = set()
     for bundle in payload.get("bundles") or []:
         for item in bundle.get("items") or []:
-            photo = item.get("photo") or {}
-            if photo.get("filename"):
-                names.add(str(photo["filename"]))
+            fname = photo_filename(item.get("photo"))
+            if fname:
+                names.add(fname)
         for slot in bundle.get("photo_slots") or []:
             if slot:
                 names.add(str(slot))
@@ -42,6 +52,13 @@ def filenames_in_run(payload: dict[str, Any]) -> set[str]:
         if photo.get("filename"):
             names.add(str(photo["filename"]))
     return names
+
+
+def order_photo_path(order_id: int, filename: str, *, homelab: bool = False) -> str:
+    safe = _safe_filename(filename)
+    if homelab:
+        return f"/ui/homelab/orders/{order_id}/photo/{safe}"
+    return f"/ui/saas/app/orders/{order_id}/photo/{safe}"
 
 
 def offer_photo_path(
@@ -71,8 +88,8 @@ def resolve_photo_file(
     path_hint: str | None = None
     for bundle in payload.get("bundles") or []:
         for item in bundle.get("items") or []:
-            photo = item.get("photo") or {}
-            if photo.get("filename") == safe and photo.get("path"):
+            photo = item.get("photo")
+            if photo_filename(photo) == safe and isinstance(photo, dict) and photo.get("path"):
                 path_hint = str(photo["path"])
                 break
         if path_hint:
@@ -163,13 +180,16 @@ def enrich_bundles_for_offer(
         items_out = []
         for item in bundle.get("items") or []:
             row = dict(item)
-            photo = dict(row.get("photo") or {})
-            if photo.get("filename"):
+            photo = dict(row.get("photo") or {}) if isinstance(row.get("photo"), dict) else {}
+            fname = photo_filename(row.get("photo"))
+            if fname:
+                if not photo.get("filename"):
+                    photo["filename"] = fname
                 photo["thumb_url"] = offer_photo_path(
-                    store_slug, token, str(photo["filename"]), size="thumb"
+                    store_slug, token, fname, size="thumb"
                 )
                 photo["full_url"] = offer_photo_path(
-                    store_slug, token, str(photo["filename"]), size="full"
+                    store_slug, token, fname, size="full"
                 )
             row["photo"] = photo
             items_out.append(row)
