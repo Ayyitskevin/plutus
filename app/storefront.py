@@ -5,7 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from . import config, db, orders
+from . import config, db, gallery_media, orders
 
 
 class StorefrontError(Exception):
@@ -77,11 +77,18 @@ def resolve_offer(store_slug: str, token: str) -> dict[str, Any]:
     for idx, bundle in enumerate(bundles):
         total = orders.bundle_total_cents(bundle, tenant["id"])
         priced_bundles.append({**bundle, "index": idx, "total_cents": total})
+    slug = tenant.get("store_slug") or tenant["id"]
+    display_bundles = gallery_media.enrich_bundles_for_offer(
+        store_slug=slug,
+        token=token,
+        bundles=priced_bundles,
+    )
     return {
         "tenant": tenant,
         "run": run,
+        "gallery": db.get_gallery(int(run["gallery_id"])),
         "gallery_name": gallery_name,
-        "bundles": priced_bundles,
+        "bundles": display_bundles,
         "token": token,
         "link": link,
     }

@@ -402,6 +402,12 @@ def get_gallery_name(gallery_id: int) -> str | None:
     return row["name"] if row else None
 
 
+def get_gallery(gallery_id: int) -> dict[str, Any] | None:
+    with connection() as con:
+        row = con.execute("SELECT * FROM galleries WHERE id=?", (gallery_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def list_runs(*, limit: int = 20, tenant_id: str | None = None) -> list[dict[str, Any]]:
     with connection() as con:
         if tenant_id:

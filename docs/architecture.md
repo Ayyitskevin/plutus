@@ -147,6 +147,12 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
 - Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
 
+## Tier 17 (client offer UX)
+
+- Offer pages show bundle hero + per-item photo thumbnails (`store_offer.html`)
+- Token-scoped photo route: `GET /store/{slug}/offer/{token}/photo/{filename}` (`app/gallery_media.py`)
+- JPEG thumbs cached under `DATA_DIR/offer_thumbs`; S3 originals materialized on demand
+
 ## Tier 16 (fleet — public URL)
 
 - `scripts/wire-cloudflare-flow.sh` — `plutus.kleephotography.com` via flow's `mise` tunnel → `strix-halo-a9-mega:8031`

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from .. import (
     audit,
@@ -18,6 +18,13 @@ from .. import (
 from ..auth import require_bearer
 from ..auth_context import AuthContext
 from ..orders import OrderError, create_bundle_checkout, simulate_test_payment
+from ..gallery_media import (
+    FULL_MAX_EDGE,
+    THUMB_MAX_EDGE,
+    GalleryMediaError,
+    render_jpeg,
+    resolve_photo_file,
+)
 from ..storefront import StorefrontError, create_share_link, resolve_offer
 from .deps import (
     templates,
@@ -62,6 +69,35 @@ def store_offer(request: Request, slug: str, token: str):
             run_id=offer["run"]["id"],
             stripe_enabled=billing.stripe_configured(),
         ),
+    )
+
+
+
+@router.get("/store/{slug}/offer/{token}/photo/{filename}")
+def store_offer_photo(
+    slug: str,
+    token: str,
+    filename: str,
+    size: str = Query("thumb"),
+):
+    try:
+        offer = resolve_offer(slug, token)
+        path = resolve_photo_file(
+            gallery=offer.get("gallery"),
+            payload=offer["run"]["payload"],
+            filename=filename,
+        )
+        max_edge = FULL_MAX_EDGE if size == "full" else THUMB_MAX_EDGE
+        data = render_jpeg(path, max_edge=max_edge)
+    except (StorefrontError, GalleryMediaError):
+        return Response(status_code=404)
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'inline; filename="{path.name}"',
+        },
     )
 
 
