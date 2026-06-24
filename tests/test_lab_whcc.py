@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import httpx
-import pytest
 
 from app import config, db, lab, lab_whcc, tenants
 

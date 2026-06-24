@@ -22,6 +22,7 @@ def saas_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "LAB_MOCK_PROCESS_SECONDS", 0)
     monkeypatch.setattr(config, "LAB_MOCK_SHIP_SECONDS", 0)
     monkeypatch.setattr(config, "ALLOW_SIMULATE_PAYMENT", True)
+    monkeypatch.setattr(config, "STRIPE_SECRET_KEY", "sk_test_pytest")
     monkeypatch.setattr(config, "SAAS_PUBLIC_URL", "http://plutus.test")
     db.migrate()
     from app.main import app
