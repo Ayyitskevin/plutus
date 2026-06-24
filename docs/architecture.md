@@ -78,6 +78,7 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 | `wire-dionysus-saas.sh` | Dionysus pitch enrichment on :8031 |
 | `wire-r2.sh` / `wire-s3.sh` | Tenant gallery storage |
 | `wire-whcc.sh` | WHCC lab adapter |
+| `wire-smtp.sh` | SMTP order + client confirmation emails |
 | `wire-public-url.sh` | `PLUTUS_SAAS_PUBLIC_URL` (+ optional Tailscale serve) |
 | `wire-tier7.sh` / `wire-tier8.sh` | Orchestrators (Tier 8 defaults to GitHub-only tests) |
 
@@ -146,6 +147,13 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `scripts/sync-flow-mise-plutus.sh` — push `MISE_PLUTUS_*` from plutus `.env` → flow `/opt/mise/.env`
 - `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
 - Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
+
+## Tier 19 (SMTP notifications)
+
+- Richer client confirmation email — bundle title, line items, total, tracking link
+- Dashboard SMTP status + `POST /ui/saas/app/notifications/test` (sends to tenant notify email)
+- `scripts/wire-smtp.sh` arms `PLUTUS_SMTP_*` in fleet `.env`
+- `scripts/dogfood-smtp.sh` — local SMTP catcher validates photographer + client delivery
 
 ## Tier 18 (bundle editor)
 

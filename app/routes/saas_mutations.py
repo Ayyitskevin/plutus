@@ -14,6 +14,7 @@ from .. import (
     config,
     db,
     metrics,
+    notifications,
     sell,
     service,
     ui_sessions,
@@ -66,6 +67,32 @@ def ui_saas_tenant_settings(
     audit.record("tenant.settings.notify_email", request=request, ctx=ctx)
     return RedirectResponse("/ui/saas/app?settings_saved=1", status_code=303)
 
+
+@router.post("/ui/saas/app/notifications/test")
+def ui_saas_notifications_test(request: Request):
+    ctx = tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    tenant = db.get_tenant(ctx.tenant_id) or ctx.tenant
+    addr = (tenant.get("notify_email") or "").strip().lower()
+    if not addr:
+        return RedirectResponse(
+            "/ui/saas/app?notification_test_error=save+a+notify+email+first",
+            status_code=303,
+        )
+    if not notifications.smtp_ready():
+        return RedirectResponse(
+            "/ui/saas/app?notification_test_error=smtp+not+configured+on+server",
+            status_code=303,
+        )
+    sent = notifications.send_test_email(to=addr, tenant=tenant)
+    audit.record("tenant.notifications.test", request=request, ctx=ctx)
+    if not sent:
+        return RedirectResponse(
+            "/ui/saas/app?notification_test_error=delivery+failed",
+            status_code=303,
+        )
+    return RedirectResponse("/ui/saas/app?notification_test_sent=1", status_code=303)
 
 
 @router.post("/ui/saas/app/admin/tenants")

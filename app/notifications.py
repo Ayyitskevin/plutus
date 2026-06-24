@@ -13,8 +13,12 @@ from . import config, db
 log = logging.getLogger("plutus.notifications")
 
 
-def _smtp_ready() -> bool:
+def smtp_ready() -> bool:
     return bool(config.SMTP_HOST and config.SMTP_FROM)
+
+
+def _smtp_ready() -> bool:
+    return smtp_ready()
 
 
 def _send_email(*, to: str, subject: str, body: str) -> bool:
@@ -26,11 +30,17 @@ def _send_email(*, to: str, subject: str, body: str) -> bool:
     msg["To"] = to
     msg.set_content(body)
     try:
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15) as smtp:
+        smtp = smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15)
+        try:
             if config.SMTP_USER and config.SMTP_PASSWORD:
                 smtp.starttls()
                 smtp.login(config.SMTP_USER, config.SMTP_PASSWORD)
             smtp.send_message(msg)
+        finally:
+            try:
+                smtp.quit()
+            except smtplib.SMTPException:
+                smtp.close()
         return True
     except Exception:
         log.exception("failed to send email to %s", to)
@@ -56,6 +66,59 @@ def _order_recipients(tenant: dict) -> list[str]:
     if config.ORDER_ALERT_EMAIL and config.ORDER_ALERT_EMAIL not in recipients:
         recipients.append(config.ORDER_ALERT_EMAIL)
     return recipients
+
+
+def _bundle_title_for_order(order: dict) -> str | None:
+    run = db.get_run(int(order["run_id"]), tenant_id=order["tenant_id"])
+    if not run:
+        return None
+    bundles = (run.get("payload") or {}).get("bundles") or []
+    idx = int(order.get("bundle_index") or 0)
+    if 0 <= idx < len(bundles):
+        title = bundles[idx].get("title")
+        return title if title else None
+    return None
+
+
+def _client_confirmation_body(order: dict, tenant: dict) -> str:
+    from .order_tracking import client_track_url
+
+    studio = tenant.get("name") or order["tenant_id"]
+    lines = [f"Thanks — your order with {studio} is confirmed.", ""]
+    bundle_title = _bundle_title_for_order(order)
+    if bundle_title:
+        lines.append(f"Bundle: {bundle_title}")
+        lines.append("")
+    for item in order.get("items") or []:
+        qty = int(item.get("quantity") or 1)
+        unit = int(item["unit_cents"])
+        lines.append(f"  - {item['label']} × {qty} — ${unit * qty / 100:,.2f}")
+    lines.extend(
+        [
+            "",
+            f"Total: ${order['total_cents'] / 100:,.2f} USD",
+            "",
+            "Track fulfillment anytime:",
+            client_track_url(order["client_token"]),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def send_test_email(*, to: str, tenant: dict) -> bool:
+    """Send a dashboard test notification to verify SMTP delivery."""
+    studio = tenant.get("name") or tenant.get("id") or "your studio"
+    body = (
+        f"This is a test notification from Plutus for {studio}.\n\n"
+        "When clients pay, you'll receive order alerts at your notify email. "
+        "Clients receive their own confirmation with bundle details, line items, "
+        "total, and a tracking link.\n"
+    )
+    return _send_email(
+        to=to,
+        subject=f"[Plutus] Test notification — {studio}",
+        body=body,
+    )
 
 
 def _order_summary_lines(order: dict, tenant: dict, *, headline: str) -> list[str]:
@@ -101,18 +164,11 @@ def notify_order_paid(order_id: int) -> dict[str, bool]:
     emailed = any(_send_email(to=addr, subject=subject, body=body) for addr in recipients)
     client_emailed = False
     if config.NOTIFY_CLIENT_ON_PAID and order.get("client_email") and order.get("client_token"):
-        from .order_tracking import client_track_url
-
         studio = tenant.get("name") or order["tenant_id"]
-        track = client_track_url(order["client_token"])
-        client_body = (
-            f"Thanks — your order with {studio} is confirmed.\n\n"
-            f"Track fulfillment anytime:\n{track}\n"
-        )
         client_emailed = _send_email(
             to=order["client_email"],
             subject=f"Order confirmed — {studio}",
-            body=client_body,
+            body=_client_confirmation_body(order, tenant),
         )
     webhook = _post_webhook(
         {

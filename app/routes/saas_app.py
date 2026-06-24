@@ -10,6 +10,7 @@ from .. import (
     config,
     db,
     lab,
+    notifications,
 )
 from ..auth_context import AuthContext
 from .deps import (
@@ -68,6 +69,12 @@ def ui_saas_tenant_app(request: Request):
             if request.query_params.get("settings_saved")
             else None,
             settings_error=request.query_params.get("settings_error"),
+            smtp_ready=notifications.smtp_ready(),
+            smtp_from=config.SMTP_FROM or "",
+            notification_test_message="Test email sent."
+            if request.query_params.get("notification_test_sent")
+            else None,
+            notification_test_error=request.query_params.get("notification_test_error"),
         ),
     )
 

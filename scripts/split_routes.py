@@ -12,6 +12,7 @@ ROUTES = ROOT / "app" / "routes"
 CSRF_POSTS = {
     "/ui/logout",
     "/ui/saas/app/settings",
+    "/ui/saas/app/notifications/test",
     "/ui/saas/app/admin/tenants",
     "/ui/saas/app/admin/tenants/{tenant_id}",
     "/ui/saas/app/admin/tenants/{tenant_id}/keys",

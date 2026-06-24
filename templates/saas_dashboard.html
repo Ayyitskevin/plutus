@@ -167,13 +167,27 @@
 
 <div class="card">
   <h3 style="margin-top:0">Order notifications</h3>
-  <p class="small" style="margin:0 0 .75rem">Get email when clients pay or when lab orders ship.</p>
+  <p class="small" style="margin:0 0 .75rem">Get email when clients pay or when lab orders ship. Clients receive a confirmation with bundle details and a tracking link.</p>
+  {% if settings_message %}<p class="status-ok">{{ settings_message }}</p>{% endif %}
+  {% if settings_error %}<p class="status-err">{{ settings_error|replace('+', ' ') }}</p>{% endif %}
+  {% if notification_test_message %}<p class="status-ok">{{ notification_test_message }}</p>{% endif %}
+  {% if notification_test_error %}<p class="status-err">{{ notification_test_error|replace('+', ' ') }}</p>{% endif %}
+  {% if smtp_ready %}
+  <p class="small status-ok" style="margin:0 0 .75rem">SMTP ready — sending from {{ smtp_from }}</p>
+  {% else %}
+  <p class="small status-err" style="margin:0 0 .75rem">SMTP not configured on the server — emails won't send until <code>PLUTUS_SMTP_*</code> is set.</p>
+  {% endif %}
   <form method="post" action="/ui/saas/app/settings">
     {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
     <label class="small">Notify email
       <input type="email" name="notify_email" value="{{ tenant.notify_email or '' }}" placeholder="you@studio.com">
     </label>
     <button type="submit" style="margin-top:.5rem">Save</button>
+  </form>
+  <form method="post" action="/ui/saas/app/notifications/test" style="margin-top:.75rem">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+    <button type="submit" class="secondary" {% if not smtp_ready or not tenant.notify_email %}disabled{% endif %}>Send test email</button>
+    {% if not tenant.notify_email %}<span class="small">Save a notify email first.</span>{% endif %}
   </form>
 </div>
 

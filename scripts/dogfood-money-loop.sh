@@ -36,4 +36,8 @@ if [[ -n "${PLUTUS_ORDER_WEBHOOK_URL:-}" ]]; then
   bash "$ROOT/scripts/dogfood-notifications.sh"
 fi
 
+if [[ -n "${PLUTUS_SMTP_HOST:-}" ]]; then
+  bash "$ROOT/scripts/dogfood-smtp.sh"
+fi
+
 echo "==> Money loop dogfood OK (target=${TARGET})"

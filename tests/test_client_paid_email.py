@@ -23,8 +23,23 @@ def notify_db(tmp_path, monkeypatch):
         gallery_id=gid,
         engine="mock",
         bundle_count=1,
-        estimated_total_cents=1000,
-        payload={"bundles": []},
+        estimated_total_cents=4500,
+        payload={
+            "bundles": [
+                {
+                    "title": "Favorites",
+                    "items": [
+                        {
+                            "sku": "print-8x10",
+                            "label": "Print",
+                            "unit_cents": 4500,
+                            "quantity": 1,
+                            "photo": "01.jpg",
+                        }
+                    ],
+                }
+            ]
+        },
         tenant_id="studio",
     )
     oid = db.create_order(
@@ -49,5 +64,8 @@ def test_notify_order_paid_emails_client(notify_db):
     assert out["client_email"] is True
     client_call = [c for c in send.call_args_list if c.kwargs.get("to") == "client@example.com"]
     assert len(client_call) == 1
-    assert token in client_call[0].kwargs["body"]
-    assert "plutus.test/store/order/track" in client_call[0].kwargs["body"]
+    body = client_call[0].kwargs["body"]
+    assert token in body
+    assert "plutus.test/store/order/track" in body
+    assert "Favorites" in body
+    assert "$45.00" in body
