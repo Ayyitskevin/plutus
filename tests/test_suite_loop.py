@@ -4,6 +4,15 @@ from __future__ import annotations
 import urllib.parse
 
 
+def test_parse_upsell_run_id_from_skipped_message():
+    import re
+
+    msg = "vision skipped (run 219) · upsell skipped (run 71) · offer link ready"
+    run_match = re.search(r"upsell (?:run (\d+)|skipped \(run (\d+)\))", msg)
+    run_id = int(run_match.group(1) or run_match.group(2))
+    assert run_id == 71
+
+
 def test_parse_pipeline_redirect():
     loc = (
         "/ui/pipeline?msg=vision+run+5%3B+upsell+run+42+%283+bundles%29"

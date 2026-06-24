@@ -6,13 +6,18 @@ cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/.venv/bin/activate" 2>/dev/null || true
 
-ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env}"
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+for ENV_FILE in \
+  "${PLUTUS_ENV_FILE:-$ROOT/.env}" \
+  "$ROOT/../argus/.env" \
+  "$ROOT/../mnemosyne/.env"
+do
+  if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+  fi
+done
 
 GALLERY_ID="${1:-${MISE_GALLERY_ID:-1}}"
 MNEMOSYNE_ALBUM="${MNEMOSYNE_ALBUM_ID:-}"

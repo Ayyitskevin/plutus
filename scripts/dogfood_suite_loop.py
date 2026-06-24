@@ -41,6 +41,7 @@ def _load_env_file(path: Path) -> None:
 def _load_dotenv() -> None:
     _load_env_file(ROOT / ".env")
     _load_env_file(ROOT.parent / "argus" / ".env")
+    _load_env_file(ROOT.parent / "mnemosyne" / ".env")
 
 
 def _get(url: str, *, headers: dict | None = None, timeout: float = 15.0) -> tuple[int, str]:
@@ -58,6 +59,18 @@ def _no_redirect_opener() -> urllib.request.OpenerDirector:
             return None
 
     return urllib.request.build_opener(_NoRedirect())
+
+
+def _cookie_opener_no_redirect() -> tuple[urllib.request.OpenerDirector, CookieJar]:
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    jar = CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(jar), _NoRedirect()
+    )
+    return opener, jar
 
 
 def _post_form(
@@ -102,7 +115,8 @@ def _plutus_saas_base() -> str:
 
 
 def _mnemosyne_base() -> str:
-    return os.environ.get("MNEMOSYNE_URL", "http://127.0.0.1:8000").rstrip("/")
+    port = os.environ.get("MNEMOSYNE_PORT", "8000")
+    return os.environ.get("MNEMOSYNE_URL", f"http://127.0.0.1:{port}").rstrip("/")
 
 
 def _token() -> str:
@@ -165,8 +179,10 @@ def run_argus_pipeline(gallery_id: int) -> dict:
     msg = urllib.parse.unquote_plus((qs.get("msg") or [""])[0])
     if not offer:
         raise RuntimeError(f"pipeline returned no offer_url — {msg}")
-    run_match = re.search(r"upsell run (\d+)", msg)
-    plutus_run_id = int(run_match.group(1)) if run_match else None
+    run_match = re.search(r"upsell (?:run (\d+)|skipped \(run (\d+)\))", msg)
+    plutus_run_id = None
+    if run_match:
+        plutus_run_id = int(run_match.group(1) or run_match.group(2))
     return {"offer_url": offer, "message": msg, "plutus_run_id": plutus_run_id}
 
 
@@ -194,37 +210,45 @@ def mnemosyne_attach_offer(*, album_id: int, plutus_run_id: int) -> dict:
     if not email or not password:
         raise RuntimeError("MNEMOSYNE_DOGFOOD_EMAIL and MNEMOSYNE_DOGFOOD_PASSWORD required")
 
-    jar = CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    opener, _jar = _cookie_opener_no_redirect()
 
     code, _, _ = _post_form(
         f"{base}/login",
         {"email": email, "password": password},
         opener=opener,
         timeout=30.0,
+        allow_redirects=False,
     )
     if code != 303:
         raise RuntimeError(f"mnemosyne login HTTP {code}")
 
-    code, _, _ = _post_form(
+    code, _, meta = _post_form(
         f"{base}/albums/{album_id}/plutus-generate",
         {"plutus_run_id": str(plutus_run_id)},
         opener=opener,
         timeout=60.0,
+        allow_redirects=False,
     )
     if code != 303:
         raise RuntimeError(f"plutus-generate HTTP {code}")
+    if "plutus_error" in (meta.get("location") or ""):
+        raise RuntimeError(
+            f"plutus-generate failed: {urllib.parse.unquote_plus(meta.get('location', ''))}"
+        )
 
-    code, body, _ = _post_form(
+    code, _, _ = _post_form(
         f"{base}/albums/{album_id}/share",
         {},
         opener=opener,
         timeout=30.0,
+        allow_redirects=False,
     )
     if code != 303:
         raise RuntimeError(f"share mint HTTP {code}")
 
-    db_path = os.environ.get("MNEMOSYNE_DB")
+    db_path = os.environ.get("MNEMOSYNE_DB") or str(
+        ROOT.parent / "mnemosyne" / "mnemosyne.db"
+    )
     share_token = None
     if db_path and Path(db_path).is_file():
         import sqlite3
@@ -330,7 +354,10 @@ def main() -> int:
         if result["mnemosyne"].get("offer_saved"):
             print(f"  saved offer: {result['mnemosyne']['offer_saved']}")
     elif not args.skip_mnemosyne:
-        print("\n==> Mnemosyne skipped (set --mnemosyne-album-id or MNEMOSYNE_ALBUM_ID)")
+        if not album_id:
+            print("\n==> Mnemosyne skipped (set --mnemosyne-album-id or MNEMOSYNE_ALBUM_ID)")
+        else:
+            print("\n==> Mnemosyne skipped (pipeline message had no plutus run id)")
 
     out = ROOT / "data" / f"suite-loop-{int(__import__('time').time())}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
