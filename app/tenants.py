@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import uuid
 
 from . import config, db
 
 KEY_PREFIX = "plutus_tk_"
+_TENANT_ID_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 
 
 class TenantError(Exception):
@@ -38,8 +40,30 @@ def tenant_id_from_key(raw_key: str) -> str | None:
     return tenant_id or None
 
 
-def _normalize_slug(slug: str) -> str:
-    return slug.strip().lower().replace(" ", "-")
+def _normalize_identifier(value: str) -> str:
+    return re.sub(r"\s+", "-", value.strip().lower())
+
+
+def normalize_tenant_id(tenant_id: str) -> str:
+    tid = _normalize_identifier(tenant_id)
+    if not tid:
+        raise TenantError("tenant id required")
+    if "_" in tid:
+        raise TenantError("tenant id must not contain underscores (reserved for API key format)")
+    if not _TENANT_ID_RE.fullmatch(tid):
+        raise TenantError(
+            "tenant id must be 1-64 chars: lowercase letters, numbers, and hyphens"
+        )
+    return tid
+
+
+def normalize_store_slug(slug: str) -> str:
+    normalized = _normalize_identifier(slug)
+    if not normalized or not _TENANT_ID_RE.fullmatch(normalized):
+        raise TenantError(
+            "store slug must be 1-64 chars: lowercase letters, numbers, and hyphens"
+        )
+    return normalized
 
 
 def create_tenant(
@@ -49,14 +73,10 @@ def create_tenant(
     store_slug: str | None = None,
     monthly_recommend_cap: int | None = None,
 ) -> dict:
-    tid = tenant_id.strip().lower().replace(" ", "-")
-    if not tid:
-        raise TenantError("tenant id required")
-    if "_" in tid:
-        raise TenantError("tenant id must not contain underscores (reserved for API key format)")
+    tid = normalize_tenant_id(tenant_id)
     if db.get_tenant(tid):
         raise TenantError(f"tenant already exists: {tid}")
-    slug = _normalize_slug(store_slug or tid)
+    slug = normalize_store_slug(store_slug or tid)
     if db.get_tenant_by_slug(slug):
         raise TenantError(f"store slug already taken: {slug}")
     return db.create_tenant(

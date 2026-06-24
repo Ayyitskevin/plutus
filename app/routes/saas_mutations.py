@@ -26,7 +26,7 @@ from ..bundle_editor import BundleEditError, parse_bundle_form, save_run_edits
 from ..metering import MeteringError
 from ..sell import SellError
 from ..storefront import StorefrontError, create_share_link
-from ..tenants import TenantError
+from ..tenants import TenantError, normalize_store_slug
 from .csrf import require_csrf
 from .deps import (
     admin_tenant_context,
@@ -221,8 +221,6 @@ def ui_saas_admin_resend_welcome(request: Request, tenant_id: str):
     ctx = admin_ui_redirect(request)
     if not isinstance(ctx, AuthContext):
         return ctx
-    from .. import tenants
-
     tenant = db.get_tenant(tenant_id)
     if tenant is None:
         return RedirectResponse("/ui/saas/app/admin?error=tenant+not+found", status_code=303)
@@ -301,7 +299,13 @@ def ui_saas_admin_patch_tenant(
     if name and name.strip():
         fields["name"] = name.strip()
     if store_slug and store_slug.strip():
-        slug = store_slug.strip().lower()
+        try:
+            slug = normalize_store_slug(store_slug)
+        except TenantError as exc:
+            return RedirectResponse(
+                f"/ui/saas/app/admin/tenants/{tenant_id}?error={quote_plus(str(exc))}",
+                status_code=303,
+            )
         existing = db.get_tenant_by_slug(slug)
         if existing and existing["id"] != tenant_id:
             return RedirectResponse(

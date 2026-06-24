@@ -64,6 +64,55 @@ def test_admin_create_tenant_and_issue_key(saas_client):
     assert tenant["store_slug"] == "acme-photo"
 
 
+def test_admin_create_rejects_unsafe_tenant_identifier(saas_client):
+    r = saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    r = saas_client.post(
+        "/ui/saas/app/admin/tenants",
+        data={"tenant_id": "bad/id", "name": "Bad Studio", "store_slug": "bad"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "tenant+id+must+be+1-64" in r.headers["location"]
+    assert db.get_tenant("bad/id") is None
+
+
+def test_create_tenant_normalizes_whitespace_and_rejects_unsafe_slugs(saas_client):
+    tenant = tenants.create_tenant("Space Studio", name="Space", store_slug="Space Studio")
+    assert tenant["id"] == "space-studio"
+    assert tenant["store_slug"] == "space-studio"
+
+    with pytest.raises(tenants.TenantError, match="store slug must be"):
+        tenants.create_tenant("bad-slug", name="Bad", store_slug="bad/slug")
+
+
+def test_admin_patch_rejects_invalid_store_slug(saas_client):
+    tenants.create_tenant("beta", name="Beta", store_slug="beta-shop")
+
+    r = saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    r = saas_client.post(
+        "/ui/saas/app/admin/tenants/beta",
+        data={"store_slug": "bad/slug", "active": "1"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "store+slug+must+be+1-64" in r.headers["location"]
+
+    beta = db.get_tenant("beta")
+    assert beta["store_slug"] == "beta-shop"
+
+
 def test_admin_patch_rejects_duplicate_store_slug(saas_client):
     from app import tenants
 
