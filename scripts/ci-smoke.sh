@@ -10,7 +10,7 @@ elif command -v ruff >/dev/null 2>&1; then
   PY=""
 else
   echo "==> Installing dev deps"
-  pip install -q -e ".[dev]"
+  pip install -q -e ".[dev,saas]"
   PY="$ROOT/.venv/bin"
 fi
 

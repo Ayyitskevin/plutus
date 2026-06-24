@@ -8,7 +8,7 @@ DEST="$UNIT_DIR/plutus-saas.service"
 echo "==> Plutus SaaS user service from $ROOT"
 
 if [[ ! -f "$ROOT/.venv/bin/uvicorn" ]]; then
-  echo "Missing venv — run: python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'"
+  echo "Missing venv — run: python3 -m venv .venv && .venv/bin/pip install -e '.[dev,saas]'"
   exit 1
 fi
 

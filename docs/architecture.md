@@ -134,6 +134,14 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `scripts/dogfood-wait-batch.sh` — shared async-analyze polling for all dogfood scripts
 - `wire-cloudflare-tunnel.sh --bootstrap` — optional tunnel create + DNS route
 
+## Tier 14 (GitHub + fleet)
+
+- `scripts/wire-redis.sh` — Docker Redis for SaaS rate limits (`plutus-redis` on :6379)
+- Mise publish hook armed for `flow-studio` tenant (`PLUTUS_MISE_HOOK_*`)
+- Remaining API routes async (`/analyze-folder`, `/recommend/mise-gallery`)
+- CI installs `.[dev,saas]`; Postgres workflow job on GitHub Actions
+
 ## Not built yet
 
 - WHCC live API credentials on production fleet (HMAC + stub path ready)
+- Flow `MISE_PLUTUS_*` env on remote flow host (see `wire-mise-hook-saas.sh` hints)

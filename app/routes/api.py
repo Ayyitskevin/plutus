@@ -23,7 +23,7 @@ log = logging.getLogger("plutus")
 router = APIRouter()
 
 @router.post("/recommend/mise-gallery")
-def recommend_mise_gallery_api(
+async def recommend_mise_gallery_api(
     request: Request,
     mise_gallery_id: int = Form(...),
     limit: int | None = Form(None),
@@ -42,7 +42,8 @@ def recommend_mise_gallery_api(
         scope = homelab.tenant_id()
     else:
         scope = None
-    result = mise_hook.recommend_published_gallery(
+    result = await run_sync(
+        mise_hook.recommend_published_gallery,
         mise_gallery_id=mise_gallery_id,
         tenant_id=scope,
         argus_run_id=argus_run_id,
@@ -108,7 +109,7 @@ def upload_batch_status_api(batch_id: str, ctx: AuthContext = Depends(require_be
 
 
 @router.post("/analyze-folder")
-def analyze_folder_api(
+async def analyze_folder_api(
     folder: str = Form(...),
     name: str | None = Form(None),
     argus_run_id: int | None = Form(None),
@@ -119,8 +120,12 @@ def analyze_folder_api(
         raise HTTPException(status_code=403, detail="folder analyze requires admin in SaaS mode")
     path = Path(folder).expanduser()
     try:
-        result = service.analyze_folder(
-            path, name=name, argus_run_id=argus_run_id, limit=limit
+        result = await run_sync(
+            service.analyze_folder,
+            path,
+            name=name,
+            argus_run_id=argus_run_id,
+            limit=limit,
         )
     except MeteringError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc

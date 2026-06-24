@@ -42,4 +42,10 @@ if [[ -f "$HOME/ai-workspace/mise-flow-sync/scripts/deploy-flow.sh" ]]; then
   echo "    MISE_PLUTUS_USE_WEBHOOK=true   # optional — uses /webhooks/mise/gallery-published"
 fi
 
+if systemctl --user is-active plutus-saas >/dev/null 2>&1; then
+  echo "==> Restart plutus-saas"
+  systemctl --user restart plutus-saas
+  sleep 2
+fi
+
 echo "Done — Mise publish hook armed for tenant ${TENANT_ID}"

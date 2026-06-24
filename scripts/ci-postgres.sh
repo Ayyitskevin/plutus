@@ -14,7 +14,7 @@ if [[ -x "$ROOT/.venv/bin/ruff" ]]; then
 elif command -v ruff >/dev/null 2>&1; then
   PY=""
 else
-  pip install -q -e ".[dev]"
+    pip install -q -e ".[dev,saas]"
   PY="$ROOT/.venv/bin"
 fi
 
