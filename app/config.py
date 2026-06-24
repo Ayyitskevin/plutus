@@ -76,6 +76,12 @@ RATE_LIMIT_PER_MINUTE = int(os.environ.get("PLUTUS_RATE_LIMIT_PER_MINUTE", "60")
 RATE_LIMIT_RECOMMEND_PER_MINUTE = int(
     os.environ.get("PLUTUS_RATE_LIMIT_RECOMMEND_PER_MINUTE", "20")
 )
+# Which proxy header (if any) to trust for the client IP behind a reverse proxy.
+# "" (default) trusts only the socket peer — forwarded headers are spoofable, so a
+# client could otherwise rotate X-Forwarded-For to dodge per-IP limits. Set to
+# "cloudflare" behind the CF tunnel (uses CF-Connecting-IP) or "xff" only when a
+# trusted proxy you control rewrites X-Forwarded-For.
+RATE_LIMIT_TRUSTED_PROXY = os.environ.get("PLUTUS_RATE_LIMIT_TRUSTED_PROXY", "").strip().lower()
 REDIS_URL = os.environ.get("PLUTUS_REDIS_URL") or None
 
 AUDIT_LOG_ENABLED = os.environ.get("PLUTUS_AUDIT_LOG_ENABLED", "true").lower() == "true"

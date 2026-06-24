@@ -26,16 +26,31 @@ RESEND_VERIFY_PATHS = frozenset({"/ui/saas/resend-verification"})
 WINDOW_SECONDS = 60
 
 
+def _client_ip(request: Request) -> str:
+    """Resolve the client IP for rate-limit keying.
+
+    Forwarded headers are attacker-controlled unless a trusted proxy rewrites
+    them, so we only honor them when explicitly configured — otherwise a client
+    could rotate X-Forwarded-For to get a fresh bucket per request and evade the
+    per-IP limits that guard signup/login/resend-verification."""
+    mode = config.RATE_LIMIT_TRUSTED_PROXY
+    if mode == "cloudflare":
+        cf = request.headers.get("cf-connecting-ip", "").strip()
+        if cf:
+            return cf
+    elif mode == "xff":
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
 def _client_key(request: Request, ctx: AuthContext | None) -> str:
     if ctx and ctx.tenant_id:
         return f"tenant:{ctx.tenant_id}"
     if ctx and ctx.is_admin:
         return "admin"
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if forwarded:
-        return f"ip:{forwarded}"
-    host = request.client.host if request.client else "unknown"
-    return f"ip:{host}"
+    return f"ip:{_client_ip(request)}"
 
 
 def _limit_for(request: Request) -> int:

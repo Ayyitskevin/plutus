@@ -97,14 +97,19 @@ def resolve_photo_file(
 
     candidates: list[Path] = []
     if path_hint:
+        # path_hint is generated server-side at recommend time, but we still refuse
+        # to let it point at a file whose name differs from the token-validated
+        # filename — so a tampered or buggy payload can never serve an arbitrary
+        # file under the cover of this offer (defense-in-depth for H1).
         if path_hint.startswith("s3://"):
             without = path_hint.removeprefix("s3://")
             _bucket, _, key = without.partition("/")
-            digest = hashlib.sha256(path_hint.encode()).hexdigest()[:16]
-            cache = config.DATA_DIR / "offer_cache" / digest
-            cache.mkdir(parents=True, exist_ok=True)
-            candidates.append(storage._materialize_s3_uri(path_hint, cache))
-        else:
+            if Path(key).name == safe:
+                digest = hashlib.sha256(path_hint.encode()).hexdigest()[:16]
+                cache = config.DATA_DIR / "offer_cache" / digest
+                cache.mkdir(parents=True, exist_ok=True)
+                candidates.append(storage._materialize_s3_uri(path_hint, cache))
+        elif Path(path_hint).name == safe:
             candidates.append(Path(path_hint))
 
     if gallery:

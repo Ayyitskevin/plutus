@@ -10,7 +10,15 @@ log = logging.getLogger("plutus.upload_worker")
 
 
 def requeue_stale_batches() -> int:
-    """Re-queue batches stuck in analyzing (worker crash / timeout)."""
+    """Re-queue batches stuck in analyzing (worker crash / timeout).
+
+    SAFE ONLY UNDER A SINGLE WORKER PROCESS. Staleness is purely time-based
+    (analyze_started_at older than UPLOAD_ANALYZE_STALE_MINUTES) with no
+    heartbeat, so it cannot tell a crashed worker from a slow-but-alive one.
+    With one process the analyze loop is sequential, so anything still
+    'analyzing' at the top of a cycle is genuinely orphaned. With 2+ worker
+    processes this would yank a peer's in-flight batch and double-process it —
+    scaling beyond one worker requires a heartbeat or lease first (deferred)."""
     stale_before = (
         datetime.now(UTC) - timedelta(minutes=config.UPLOAD_ANALYZE_STALE_MINUTES)
     ).isoformat()
