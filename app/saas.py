@@ -32,6 +32,7 @@ SAAS_PUBLIC_UI_PREFIXES = (
     "/ui/saas/login",
     "/ui/saas/signup",
     "/ui/saas/verify-email",
+    "/ui/saas/claim-invite",
     "/ui/saas/resend-verification",
     "/static/",
 )

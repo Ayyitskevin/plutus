@@ -63,6 +63,7 @@ SIGNUP_VERIFY_TOKEN_HOURS = int(os.environ.get("PLUTUS_SIGNUP_VERIFY_TOKEN_HOURS
 SIGNUP_VERIFY_DEV_BYPASS = (
     os.environ.get("PLUTUS_SIGNUP_VERIFY_DEV_BYPASS", "false").lower() == "true"
 )
+TENANT_INVITE_TOKEN_HOURS = int(os.environ.get("PLUTUS_TENANT_INVITE_TOKEN_HOURS", "72"))
 
 # Mise publish hook — default SaaS tenant when flow POSTs without tenant_id
 MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None

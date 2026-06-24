@@ -182,14 +182,20 @@ def ui_saas_admin_create_tenant(
     db.update_tenant(tenant["id"], **fields)
     tenant = db.get_tenant(tenant["id"]) or tenant
     audit.record("admin.tenant.create", request=request, ctx=ctx, tenant_id=tenant["id"])
-    issued = tenants.issue_api_key(tenant["id"], label="bootstrap")
+    from .. import tenant_invite
+
+    issued_api_key: str | None = None
     welcome_sent = False
     if addr and notifications.smtp_ready():
+        token = tenant_invite.create_invite(tenant_id=tenant["id"], email=addr)
         welcome_sent = notifications.send_tenant_welcome_email(
             to=addr,
             tenant=tenant,
-            api_key=issued["api_key"],
+            invite_url=tenant_invite.claim_url(token),
         )
+    elif not addr or not notifications.smtp_ready():
+        issued = tenants.issue_api_key(tenant["id"], label="bootstrap")
+        issued_api_key = issued["api_key"]
     if welcome_sent:
         admin_message = f"Tenant created. Welcome email sent to {addr}."
     elif addr and not notifications.smtp_ready():
@@ -205,7 +211,7 @@ def ui_saas_admin_create_tenant(
             request,
             tenant["id"],
             admin_message=admin_message,
-            issued_api_key=issued["api_key"],
+            issued_api_key=issued_api_key,
         ),
     )
 
@@ -241,11 +247,13 @@ def ui_saas_admin_resend_welcome(request: Request, tenant_id: str):
                 admin_error="SMTP not configured on server.",
             ),
         )
-    issued = tenants.issue_api_key(tenant_id, label="welcome-resend")
+    from .. import tenant_invite
+
+    token = tenant_invite.create_invite(tenant_id=tenant_id, email=addr)
     sent = notifications.send_tenant_welcome_email(
         to=addr,
         tenant=tenant,
-        api_key=issued["api_key"],
+        invite_url=tenant_invite.claim_url(token),
     )
     audit.record(
         "admin.tenant.welcome_resend",
@@ -270,7 +278,6 @@ def ui_saas_admin_resend_welcome(request: Request, tenant_id: str):
             request,
             tenant_id,
             admin_message=f"Welcome email resent to {addr}.",
-            issued_api_key=issued["api_key"],
         ),
     )
 

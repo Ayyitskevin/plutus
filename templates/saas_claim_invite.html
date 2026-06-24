@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <h2 style="margin-top:0">Accept invite</h2>
+  {% if invite_error %}
+  <p class="err">{{ invite_error }}</p>
+  <p class="small"><a href="/ui/saas/login">Sign in</a> if you already claimed your invite.</p>
+  {% endif %}
+</div>
+{% endblock %}

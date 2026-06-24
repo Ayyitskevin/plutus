@@ -50,11 +50,13 @@ db.migrate()
 tid = "${TENANT_ID}"
 tenants.create_tenant(tid, name="Welcome Studio", store_slug="${TENANT_ID}")
 tenant = db.get_tenant(tid)
-key = tenants.issue_api_key(tid, label="bootstrap")["api_key"]
+from app import tenant_invite
+
+token = tenant_invite.create_invite(tenant_id=tid, email="${EMAIL}")
 assert notifications.send_tenant_welcome_email(
     to="${EMAIL}",
     tenant=tenant,
-    api_key=key,
+    invite_url=tenant_invite.claim_url(token),
 ), "welcome email failed"
 print("  sent to ${EMAIL}")
 PY
@@ -72,9 +74,9 @@ with open(log, encoding="utf-8") as fh:
             entries.append(json.loads(line))
 assert entries, "no SMTP messages captured"
 body = entries[0].get("body") or ""
-assert "plutus_tk_" in body, body[:300]
-assert "plutus.test/ui/saas/login" in body, body[:300]
-print("  welcome body OK — API key + login link present")
+assert "plutus.test/ui/saas/claim-invite" in body, body[:300]
+assert "plutus_tk_" not in body, body[:300]
+print("  welcome body OK — invite link present, no raw API key")
 PY
 
 echo "==> Welcome email dogfood OK"

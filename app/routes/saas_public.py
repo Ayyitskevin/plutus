@@ -223,6 +223,57 @@ def ui_saas_verify_email(request: Request, token: str | None = Query(None)):
 
 
 
+@router.get("/ui/saas/claim-invite", response_class=HTMLResponse)
+def ui_saas_claim_invite(request: Request, token: str | None = Query(None)):
+    from .. import tenant_invite
+
+    if not token:
+        return templates.TemplateResponse(
+            request,
+            "saas_claim_invite.html",
+            ui_context(
+                request,
+                title="Accept invite",
+                invite_error="missing invite token",
+            ),
+            status_code=400,
+        )
+    try:
+        result = tenant_invite.claim_token(token)
+    except tenant_invite.TenantInviteError as exc:
+        return templates.TemplateResponse(
+            request,
+            "saas_claim_invite.html",
+            ui_context(request, title="Accept invite", invite_error=str(exc)),
+            status_code=400,
+        )
+    response = templates.TemplateResponse(
+        request,
+        "saas_invite_welcome.html",
+        ui_context(
+            request,
+            title="Welcome",
+            tenant=result["tenant"],
+            api_key=result["api_key"],
+            store_url=result["store_url"],
+        ),
+    )
+    ui_sessions.attach_session_cookie(
+        response,
+        is_admin=False,
+        tenant_id=result["tenant"]["id"],
+        api_key_id=result.get("key_id"),
+    )
+    audit.record(
+        "tenant.invite.claimed",
+        request=request,
+        tenant_id=result["tenant"]["id"],
+        resource=result["tenant"]["id"],
+    )
+    return response
+
+
+
 @router.get("/ui/saas/signup/pending", response_class=HTMLResponse)
 def ui_saas_signup_pending(request: Request, email: str | None = None):
     if not signup.signup_enabled():

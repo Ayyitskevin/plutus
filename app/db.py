@@ -266,6 +266,20 @@ def _sqlite_migrate() -> None:
             "CREATE INDEX IF NOT EXISTS idx_signup_verify_tenant "
             "ON signup_verifications(tenant_id, created_at)"
         )
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS tenant_invites (
+                token TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                email TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL,
+                claimed_at TEXT
+            )"""
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tenant_invites_tenant "
+            "ON tenant_invites(tenant_id, created_at)"
+        )
         order_cols = {r[1] for r in con.execute("PRAGMA table_info(orders)")}
         for col, typ in [("lab_status", "TEXT"), ("lab_ref", "TEXT"), ("client_token", "TEXT")]:
             if col not in order_cols:
@@ -617,6 +631,48 @@ def mark_signup_verification_verified(token: str, *, verified_at: str) -> None:
         con.execute(
             "UPDATE signup_verifications SET verified_at=? WHERE token=?",
             (verified_at, token),
+        )
+
+
+def insert_tenant_invite(
+    *,
+    token: str,
+    tenant_id: str,
+    email: str,
+    expires_at: str,
+) -> None:
+    with connection() as con:
+        con.execute(
+            """INSERT INTO tenant_invites (token, tenant_id, email, expires_at)
+               VALUES (?, ?, ?, ?)""",
+            (token, tenant_id, email, expires_at),
+        )
+
+
+def get_tenant_invite(token: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            "SELECT * FROM tenant_invites WHERE token=?",
+            (token,),
+        ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def revoke_pending_tenant_invites(tenant_id: str) -> None:
+    with connection() as con:
+        con.execute(
+            "DELETE FROM tenant_invites WHERE tenant_id=? AND claimed_at IS NULL",
+            (tenant_id,),
+        )
+
+
+def mark_tenant_invite_claimed(token: str, *, claimed_at: str) -> None:
+    with connection() as con:
+        con.execute(
+            "UPDATE tenant_invites SET claimed_at=? WHERE token=?",
+            (claimed_at, token),
         )
 
 

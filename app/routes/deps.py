@@ -98,9 +98,10 @@ def admin_tenant_context(
     store_url = f"{config.SAAS_PUBLIC_URL.rstrip('/')}/store/{slug}"
     invite_kit = (
         f"Plutus invite — {tenant.get('name') or tenant_id}\n\n"
-        f"Sign in: {login_url}\n"
         f"Storefront: {store_url}\n\n"
-        "Use the API key from your welcome email (or ask your admin to resend)."
+        "Open the one-time link in your welcome email to reveal your API key, "
+        "then sign in at:\n"
+        f"{login_url}"
     )
     return ui_context(
         request,

@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS signup_verifications (
 CREATE INDEX IF NOT EXISTS idx_signup_verify_tenant
     ON signup_verifications(tenant_id, created_at);
 
+CREATE TABLE IF NOT EXISTS tenant_invites (
+    token TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    email TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    claimed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_invites_tenant
+    ON tenant_invites(tenant_id, created_at);
+
 CREATE TABLE IF NOT EXISTS tenant_api_keys (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL REFERENCES tenants(id),

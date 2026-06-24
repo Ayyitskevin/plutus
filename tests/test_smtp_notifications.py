@@ -144,6 +144,8 @@ def test_admin_create_tenant_sends_welcome_email(saas_client):
     assert b"Welcome email sent" in r.content
     send.assert_called_once()
     assert send.call_args.kwargs["to"] == "photo@invite.test"
+    assert "invite_url" in send.call_args.kwargs
+    assert send.call_args.kwargs.get("api_key") is None
     tenant = db.get_tenant("invite")
     assert tenant and tenant["notify_email"] == "photo@invite.test"
 
@@ -172,6 +174,7 @@ def test_admin_resend_welcome_email(saas_client):
     assert b"Welcome email resent" in r.content
     send.assert_called_once()
     assert send.call_args.kwargs["to"] == "ops@resend.test"
+    assert "invite_url" in send.call_args.kwargs
 
 
 def test_admin_create_tenant_skips_welcome_without_smtp(saas_client, monkeypatch):
