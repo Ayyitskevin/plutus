@@ -5,6 +5,7 @@
 <div class="card">
   <h2 style="margin-top:0">Analyze a gallery folder</h2>
   <form method="post" action="/analyze">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
     <label for="folder">Folder path</label>
     <input id="folder" name="folder" type="text" required
            placeholder="/path/to/gallery/originals">

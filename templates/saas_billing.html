@@ -46,6 +46,7 @@
       <p class="status-ok">You're subscribed — manage payment method or cancel below.</p>
       {% elif subscription.can_subscribe %}
       <form method="post" action="/ui/saas/billing/checkout">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
         <button type="submit">Upgrade to Pro</button>
       </form>
       {% else %}
@@ -53,6 +54,7 @@
       {% endif %}
       {% if subscription.can_manage %}
       <form method="post" action="/ui/saas/billing/portal" style="margin-top:.5rem">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
         <button type="submit" class="secondary">Manage subscription</button>
       </form>
       {% endif %}

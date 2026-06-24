@@ -21,6 +21,7 @@
   <p style="margin:.75rem 0 0"><strong>Package total: {{ bundle.total_cents|money }}</strong></p>
   {% if stripe_enabled %}
   <form method="post" action="/store/{{ slug }}/offer/{{ token }}/checkout" style="margin-top:1rem">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
     <input type="hidden" name="bundle_index" value="{{ bundle.index }}">
     <label class="small">Email (optional) <input type="email" name="client_email"></label>
     <label class="small">Name (optional) <input type="text" name="client_name"></label>

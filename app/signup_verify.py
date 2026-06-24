@@ -41,7 +41,7 @@ def create_pending_verification(
     *,
     tenant_id: str,
     email: str,
-    key_id: str,
+    key_id: str | None = None,
 ) -> str | None:
     """Store verification token; return token when email verification is active."""
     if not verification_enabled():
@@ -104,18 +104,15 @@ def verify_token(token: str) -> dict:
     tenant = db.get_tenant(tenant_id) or tenant
     from . import tenants
 
-    key_id = row.get("key_id")
-    if key_id:
-        tenants.revoke_key(key_id)
-        issued = tenants.issue_api_key(tenant_id, label="signup")
-        api_key = issued["api_key"]
-    elif row.get("api_key"):
-        api_key = row["api_key"]
-    else:
-        raise SignupVerifyError("invalid verification link")
+    legacy_key_id = row.get("key_id")
+    if legacy_key_id:
+        tenants.revoke_key(legacy_key_id)
+    issued = tenants.issue_api_key(tenant_id, label="signup")
+    api_key = issued["api_key"]
     return {
         "tenant": tenant,
         "api_key": api_key,
+        "key_id": issued["key_id"],
         "store_url": f"/store/{tenant.get('store_slug') or tenant_id}",
     }
 
@@ -132,3 +129,10 @@ def resend_for_email(email: str) -> bool:
         email=row["email"],
         token=row["token"],
     )
+
+
+def resend_attempted(email: str) -> bool:
+    """Whether a resend could have been sent (for anti-enumeration UI)."""
+    if not verification_enabled():
+        return False
+    return bool(db.get_pending_signup_verification_by_email(email.strip().lower()))

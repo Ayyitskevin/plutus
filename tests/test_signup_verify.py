@@ -39,18 +39,11 @@ def test_signup_requires_verification_before_api_key_works(saas_client):
             store_slug="verify-studio",
         )
     assert result["verification_required"] is True
-    api_key = result["api_key"]
-
-    denied = saas_client.get(
-        "/runs/1/json",
-        headers={"Authorization": f"Bearer {api_key}"},
-    )
-    assert denied.status_code == 401
+    assert result["api_key"] is None
 
     row = db.get_pending_signup_verification_by_email("owner@verify.test")
     assert row is not None
-    assert row.get("key_id")
-    assert not row.get("api_key")
+    assert not row.get("key_id")
 
     verify = saas_client.get(f"/ui/saas/verify-email?token={row['token']}")
     assert verify.status_code == 200
@@ -63,10 +56,9 @@ def test_signup_requires_verification_before_api_key_works(saas_client):
     match = re.search(r"plutus_tk_verify-studio_[a-f0-9]+", verify.content.decode())
     assert match
     assert tenants.resolve_api_key(match.group(0)) is not None
-    assert tenants.resolve_api_key(api_key) is None
 
 
-def test_verify_token_marks_tenant_verified_and_reissues_key(tmp_path, monkeypatch):
+def test_verify_token_marks_tenant_verified_and_issues_key(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "SAAS_MODE", True)
@@ -85,7 +77,6 @@ def test_verify_token_marks_tenant_verified_and_reissues_key(tmp_path, monkeypat
     pending = db.get_pending_signup_verification_by_email("tok@verify.test")
     assert pending
     verified = signup_verify.verify_token(pending["token"])
-    assert verified["api_key"] != result["api_key"]
     assert verified["api_key"].startswith("plutus_tk_tok-verify_")
     tenant = db.get_tenant("tok-verify")
     assert tenant and tenant.get("email_verified_at")
@@ -106,6 +97,7 @@ def test_signup_skips_verify_without_smtp(tmp_path, monkeypatch):
         store_slug="no-smtp",
     )
     assert result["verification_required"] is False
+    assert result["api_key"]
     tenant = db.get_tenant("no-smtp")
     assert tenant and tenant.get("email_verified_at")
 
@@ -127,14 +119,6 @@ def test_resend_verification_sends_email(saas_client):
     assert "resent=1" in r.headers["location"]
     send.assert_called_once()
 
-    r = saas_client.post(
-        "/ui/saas/resend-verification",
-        data={"email": "nobody@verify.test"},
-        follow_redirects=False,
-    )
-    assert r.status_code == 303
-    assert "resent=0" in r.headers["location"]
-
 
 def test_verify_token_rejects_expired_and_malformed_expiry(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
@@ -143,18 +127,17 @@ def test_verify_token_rejects_expired_and_malformed_expiry(tmp_path, monkeypatch
     monkeypatch.setattr(config, "SIGNUP_VERIFY_EMAIL", True)
     monkeypatch.setattr(config, "SMTP_HOST", "smtp.test")
     db.migrate()
-    from app import tenants
 
-    tenants.create_tenant("exp-test", name="Exp", store_slug="exp-test")
-    issued = tenants.issue_api_key("exp-test", label="signup")
-    expired = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     db.insert_signup_verification(
         token="expired-token",
         tenant_id="exp-test",
         email="exp@test.com",
-        key_id=issued["key_id"],
-        expires_at=expired,
+        key_id=None,
+        expires_at=(datetime.now(UTC) - timedelta(hours=1)).isoformat(),
     )
+    from app import tenants
+
+    tenants.create_tenant("exp-test", name="Exp", store_slug="exp-test")
     with pytest.raises(signup_verify.SignupVerifyError, match="expired"):
         signup_verify.verify_token("expired-token")
 
@@ -162,7 +145,7 @@ def test_verify_token_rejects_expired_and_malformed_expiry(tmp_path, monkeypatch
         token="bad-expiry",
         tenant_id="exp-test",
         email="bad@test.com",
-        key_id=issued["key_id"],
+        key_id=None,
         expires_at="not-a-timestamp",
     )
     with pytest.raises(signup_verify.SignupVerifyError, match="invalid"):

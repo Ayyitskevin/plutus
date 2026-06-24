@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Form, Header, HTTPException, Request
 
-from . import config, tenants
+from . import config, db, tenants, ui_sessions
 from .auth_context import AuthContext, set_auth_context
 
 UI_TOKEN_COOKIE = "plutus_ui_token"
@@ -27,12 +27,32 @@ def token_from_request(
     return None
 
 
+def _ctx_from_session(request: Request, session: dict) -> AuthContext:
+    if session.get("is_admin"):
+        ctx = AuthContext(is_admin=True)
+    else:
+        tenant_id = session.get("tenant_id")
+        tenant = db.get_tenant(tenant_id) if tenant_id else None
+        if not tenant:
+            raise HTTPException(status_code=401, detail="session invalid")
+        ctx = AuthContext(tenant=tenant, api_key_id=session.get("api_key_id"))
+    set_auth_context(ctx)
+    request.state.auth = ctx
+    request.state.ui_session = session
+    return ctx
+
+
 def resolve_auth(
     request: Request,
     *,
     authorization: str | None = None,
     form_token: str | None = None,
 ) -> AuthContext:
+    session_id = request.cookies.get(ui_sessions.UI_SESSION_COOKIE)
+    session = ui_sessions.get_session(session_id)
+    if session:
+        return _ctx_from_session(request, session)
+
     provided = token_from_request(
         request, authorization=authorization, form_token=form_token
     )
@@ -67,6 +87,18 @@ def resolve_auth(
     set_auth_context(ctx)
     request.state.auth = ctx
     return ctx
+
+
+def verify_ui_csrf(request: Request, csrf_token: str = Form("")) -> None:
+    """Require CSRF token for cookie-session POSTs."""
+    session = getattr(request.state, "ui_session", None)
+    if session is None:
+        session_id = request.cookies.get(ui_sessions.UI_SESSION_COOKIE)
+        session = ui_sessions.get_session(session_id)
+    if not session:
+        return
+    if not ui_sessions.validate_csrf(session, csrf_token or request.headers.get("X-CSRF-Token")):
+        raise HTTPException(status_code=403, detail="invalid or missing CSRF token")
 
 
 def verify_api_access(

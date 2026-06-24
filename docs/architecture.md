@@ -89,6 +89,20 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Mise publish hook (`POST /webhooks/mise/gallery-published`, `PLUTUS_MISE_HOOK_TOKEN` — separate from admin token)
 - Cloudflare tunnel templates (`ops/cloudflare-tunnel.example.yml`, `wire-cloudflare-tunnel.sh`)
 
+## Tier 10 (GitHub)
+
+- Stripe webhook process-then-dedup (500 on failure for Stripe retry)
+- `PLUTUS_TENANT_KEY_PEPPER` fail-closed at SaaS startup
+- Upload worker atomic claim + stale `analyzing` reaper
+- Opaque UI sessions (`plutus_sid` cookie) — no raw API keys in cookies
+- Signup defers API key until email verify
+- DB indexes (upload status, stripe customer, orders)
+- Login rate limit (5/min), `scripts/validate-env.sh`
+- Postgres job in CI; graceful shutdown (`TimeoutStopSec=30`)
+
 ## Not built yet
 
+- Full `main.py` router split (planned: `routes/webhooks`, `routes/saas_ui`, `routes/api`)
+- CSRF enforcement on all `/ui/saas/app/*` POST forms (hidden fields present; logout validated)
+- Streaming multipart uploads (still buffers files in memory)
 - Automated Cloudflare tunnel provisioning (manual `cloudflared tunnel create` still required)

@@ -9,6 +9,8 @@ EnvironmentFile=%h/ai-workspace/plutus/.env
 ExecStart=%h/ai-workspace/plutus/scripts/start-plutus-saas.sh
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
 
 [Install]
 WantedBy=default.target

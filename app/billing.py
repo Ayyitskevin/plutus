@@ -121,12 +121,11 @@ def ensure_stripe_customer(tenant_id: str) -> str:
     }
     customer = _stripe_request("POST", "/customers", body)
     customer_id = customer["id"]
-    db.update_tenant(
-        tenant_id,
-        stripe_customer_id=customer_id,
-        billing_status=tenant.get("billing_status") or "pending",
-    )
-    return customer_id
+    winner = db.set_stripe_customer_if_missing(tenant_id, customer_id)
+    tenant = db.get_tenant(tenant_id) or tenant
+    if not tenant.get("billing_status"):
+        db.update_tenant(tenant_id, billing_status="pending")
+    return winner
 
 
 def create_checkout_session(tenant_id: str) -> dict:
@@ -194,12 +193,16 @@ def verify_webhook_signature(payload: bytes, sig_header: str | None) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
+class WebhookProcessingError(Exception):
+    """Stripe webhook handler failed — caller should return 500 for retry."""
+
+
 def handle_webhook_event(event: dict[str, Any]) -> None:
     from . import orders as orders_mod
 
     etype = event.get("type") or "unknown"
     event_id = event.get("id")
-    if event_id and not db.record_stripe_webhook_event(event_id, etype):
+    if event_id and db.is_stripe_webhook_processed(event_id):
         log.info("skipping duplicate stripe event %s (%s)", event_id, etype)
         return
 
@@ -268,4 +271,7 @@ def handle_webhook_event(event: dict[str, Any]) -> None:
         if tid:
             db.update_tenant(tid, billing_status="past_due", active=False)
             log.warning("tenant %s marked past_due after invoice.payment_failed", tid)
-        return
+
+    if event_id:
+        if not db.record_stripe_webhook_event(event_id, etype):
+            log.warning("stripe event %s recorded by concurrent handler", event_id)

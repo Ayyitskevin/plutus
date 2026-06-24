@@ -22,6 +22,7 @@ _redis_unavailable = False
 
 RECOMMEND_PATHS = frozenset({"/analyze-folder", "/recommend/mise-gallery", "/analyze"})
 SIGNUP_PATHS = frozenset({"/ui/saas/signup"})
+LOGIN_PATHS = frozenset({"/ui/saas/login"})
 RESEND_VERIFY_PATHS = frozenset({"/ui/saas/resend-verification"})
 WINDOW_SECONDS = 60
 
@@ -41,6 +42,8 @@ def _client_key(request: Request, ctx: AuthContext | None) -> str:
 def _limit_for(request: Request) -> int:
     if request.url.path in SIGNUP_PATHS and request.method == "POST":
         return min(config.RATE_LIMIT_PER_MINUTE, 10)
+    if request.url.path in LOGIN_PATHS and request.method == "POST":
+        return min(config.RATE_LIMIT_PER_MINUTE, 5)
     if request.url.path in RESEND_VERIFY_PATHS and request.method == "POST":
         return min(config.RATE_LIMIT_PER_MINUTE, 3)
     if request.url.path in RECOMMEND_PATHS:

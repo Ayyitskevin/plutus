@@ -23,9 +23,9 @@ def pg_env(tmp_path, monkeypatch):
     with db.connection() as con:
         con.execute(
             "TRUNCATE fulfillment_events, order_items, orders, storefront_tokens, "
-            "upload_batches, product_overrides, tenant_api_keys, tenant_usage, "
-            "audit_log, stripe_webhook_events, recommendation_runs, galleries, "
-            "tenants RESTART IDENTITY CASCADE"
+            "signup_verifications, ui_sessions, upload_batches, product_overrides, "
+            "tenant_api_keys, tenant_usage, audit_log, stripe_webhook_events, "
+            "recommendation_runs, galleries, tenants RESTART IDENTITY CASCADE"
         )
 
 

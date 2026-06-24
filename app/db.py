@@ -5,7 +5,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from . import config
@@ -285,9 +285,40 @@ def _sqlite_migrate() -> None:
                 (secrets.token_urlsafe(18), oid),
             )
         batch_cols = {r[1] for r in con.execute("PRAGMA table_info(upload_batches)")}
-        for col, typ in [("analyze_error", "TEXT"), ("argus_run_id", "INTEGER")]:
+        for col, typ in [
+            ("analyze_error", "TEXT"),
+            ("argus_run_id", "INTEGER"),
+            ("analyze_started_at", "TEXT"),
+        ]:
             if col not in batch_cols:
                 con.execute(f"ALTER TABLE upload_batches ADD COLUMN {col} {typ}")
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS ui_sessions (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT,
+                api_key_id TEXT,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                csrf_token TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL
+            )"""
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_upload_batches_status "
+            "ON upload_batches(status, created_at)"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer "
+            "ON tenants(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orders_stripe_session "
+            "ON orders(stripe_session_id) WHERE stripe_session_id IS NOT NULL"
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_orders_lab_poll "
+            "ON orders(status, lab_status)"
+        )
 
 
 def migrate() -> None:
@@ -508,7 +539,7 @@ def insert_signup_verification(
     token: str,
     tenant_id: str,
     email: str,
-    key_id: str,
+    key_id: str | None,
     expires_at: str,
 ) -> None:
     with connection() as con:
@@ -679,6 +710,29 @@ def increment_tenant_usage(
     return get_tenant_usage(tenant_id, period)
 
 
+def try_increment_recommend_under_cap(tenant_id: str, cap: int) -> bool:
+    """Atomically increment recommends if under monthly cap."""
+    if cap <= 0:
+        increment_tenant_usage(tenant_id, recommends=1)
+        return True
+    period = _usage_period()
+    with connection() as con:
+        con.execute(
+            """INSERT INTO tenant_usage
+               (tenant_id, period, recommends, orders, revenue_cents, updated_at)
+               VALUES (?, ?, 0, 0, 0, datetime('now'))
+               ON CONFLICT(tenant_id, period) DO NOTHING""",
+            (tenant_id, period),
+        )
+        cur = con.execute(
+            """UPDATE tenant_usage SET recommends = recommends + 1,
+                      updated_at = datetime('now')
+               WHERE tenant_id = ? AND period = ? AND recommends < ?""",
+            (tenant_id, period, cap),
+        )
+        return cur.rowcount > 0
+
+
 def global_usage_totals() -> dict:
     period = _usage_period()
     with connection() as con:
@@ -755,6 +809,15 @@ def list_audit_events(
 # --- Stripe webhook dedup ---
 
 
+def is_stripe_webhook_processed(event_id: str) -> bool:
+    with connection() as con:
+        row = con.execute(
+            "SELECT 1 FROM stripe_webhook_events WHERE event_id=?",
+            (event_id,),
+        ).fetchone()
+    return row is not None
+
+
 def record_stripe_webhook_event(event_id: str, event_type: str) -> bool:
     with connection() as con:
         try:
@@ -772,6 +835,20 @@ def record_stripe_webhook_event(event_id: str, event_type: str) -> bool:
                 if isinstance(exc, UniqueViolation):
                     return False
             raise
+
+
+def set_stripe_customer_if_missing(tenant_id: str, customer_id: str) -> str:
+    """Atomically set stripe_customer_id; return the winning customer id."""
+    with connection() as con:
+        con.execute(
+            """UPDATE tenants SET stripe_customer_id=?, updated_at=datetime('now')
+               WHERE id=? AND (stripe_customer_id IS NULL OR stripe_customer_id='')""",
+            (customer_id, tenant_id),
+        )
+    tenant = get_tenant(tenant_id)
+    if tenant and tenant.get("stripe_customer_id"):
+        return str(tenant["stripe_customer_id"])
+    return customer_id
 
 
 # --- Storefront tokens ---
@@ -1007,7 +1084,15 @@ def get_upload_batch(batch_id: str, *, tenant_id: str | None = None) -> dict | N
 
 
 def update_upload_batch(batch_id: str, **fields) -> dict | None:
-    allowed = {"name", "photo_count", "status", "run_id", "analyze_error", "argus_run_id"}
+    allowed = {
+        "name",
+        "photo_count",
+        "status",
+        "run_id",
+        "analyze_error",
+        "argus_run_id",
+        "analyze_started_at",
+    }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return get_upload_batch(batch_id)
@@ -1036,6 +1121,97 @@ def list_upload_batches_by_status(status: str, *, limit: int = 10) -> list[dict]
             (status, limit),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def claim_upload_batch_for_processing() -> dict | None:
+    """Atomically move one queued batch to analyzing."""
+    now = datetime.now(UTC).isoformat()
+    with connection() as con:
+        if _use_postgres():
+            row = con.execute(
+                """UPDATE upload_batches
+                   SET status='analyzing', analyze_error=NULL, analyze_started_at=?
+                   WHERE id = (
+                       SELECT id FROM upload_batches WHERE status='queued'
+                       ORDER BY created_at ASC LIMIT 1
+                       FOR UPDATE SKIP LOCKED
+                   )
+                   RETURNING *""",
+                (now,),
+            ).fetchone()
+        else:
+            row = con.execute(
+                """SELECT id FROM upload_batches WHERE status='queued'
+                   ORDER BY created_at ASC LIMIT 1"""
+            ).fetchone()
+            if not row:
+                return None
+            batch_id = row["id"]
+            cur = con.execute(
+                """UPDATE upload_batches
+                   SET status='analyzing', analyze_error=NULL, analyze_started_at=?
+                   WHERE id=? AND status='queued'""",
+                (now, batch_id),
+            )
+            if cur.rowcount == 0:
+                return None
+            row = con.execute(
+                "SELECT * FROM upload_batches WHERE id=?", (batch_id,)
+            ).fetchone()
+    return dict(row) if row else None
+
+
+def requeue_stale_analyzing_batches(*, stale_before_iso: str) -> int:
+    with connection() as con:
+        cur = con.execute(
+            """UPDATE upload_batches
+               SET status='queued',
+                   analyze_error='requeued after stale analyze',
+                   analyze_started_at=NULL
+               WHERE status='analyzing'
+                 AND analyze_started_at IS NOT NULL
+                 AND analyze_started_at < ?""",
+            (stale_before_iso,),
+        )
+        return cur.rowcount
+
+
+def insert_ui_session(
+    *,
+    session_id: str,
+    tenant_id: str | None,
+    api_key_id: str | None,
+    is_admin: bool,
+    csrf_token: str,
+    expires_at: str,
+) -> None:
+    with connection() as con:
+        con.execute(
+            """INSERT INTO ui_sessions
+               (id, tenant_id, api_key_id, is_admin, csrf_token, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                session_id,
+                tenant_id,
+                api_key_id,
+                1 if is_admin else 0,
+                csrf_token,
+                expires_at,
+            ),
+        )
+
+
+def get_ui_session(session_id: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            "SELECT * FROM ui_sessions WHERE id=?", (session_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_ui_session(session_id: str) -> None:
+    with connection() as con:
+        con.execute("DELETE FROM ui_sessions WHERE id=?", (session_id,))
 
 
 def delete_product_override(tenant_id: str, sku: str) -> None:

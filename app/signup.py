@@ -68,12 +68,11 @@ def register_studio(
         plan_tier="trial",
         billing_status="trialing",
     )
-    issued = tenants.issue_api_key(tenant_id, label="signup")
     tenant = db.get_tenant(tenant_id) or tenant
     verify_token = signup_verify.create_pending_verification(
         tenant_id=tenant_id,
         email=addr,
-        key_id=issued["key_id"],
+        key_id=None,
     )
     if verify_token:
         signup_verify.send_verification_email(
@@ -81,10 +80,19 @@ def register_studio(
             email=addr,
             token=verify_token,
         )
+        return {
+            "tenant": tenant,
+            "api_key": None,
+            "store_url": f"/store/{slug}",
+            "verification_required": True,
+            "verify_email": addr,
+        }
+    issued = tenants.issue_api_key(tenant_id, label="signup")
     return {
         "tenant": tenant,
         "api_key": issued["api_key"],
+        "key_id": issued["key_id"],
         "store_url": f"/store/{slug}",
-        "verification_required": verify_token is not None,
-        "verify_email": addr if verify_token else None,
+        "verification_required": False,
+        "verify_email": None,
     }

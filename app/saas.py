@@ -13,18 +13,19 @@ from .auth_context import AuthContext
 
 log = logging.getLogger("plutus.saas")
 
-SAAS_PUBLIC_PATHS = frozenset({
-    "/healthz",
-    "/saas/status",
-    "/saas/billing/status",
-    "/openapi.json",
-    "/docs",
-    "/redoc",
-    "/webhooks/stripe",
-    "/webhooks/whcc",
-    "/webhooks/mise/gallery-published",
-    "/metrics",
-})
+def _public_paths() -> frozenset[str]:
+    paths = {
+        "/healthz",
+        "/saas/status",
+        "/saas/billing/status",
+        "/webhooks/stripe",
+        "/webhooks/whcc",
+        "/webhooks/mise/gallery-published",
+        "/metrics",
+    }
+    if not (config.SAAS_MODE and config.SAAS_DISABLE_OPENAPI):
+        paths.update({"/openapi.json", "/docs", "/redoc"})
+    return frozenset(paths)
 
 SAAS_PUBLIC_UI_PREFIXES = (
     "/ui/saas",
@@ -61,9 +62,9 @@ def validate_saas_startup() -> None:
         raise RuntimeError("PLUTUS_SAAS_MODE requires PLUTUS_API_TOKEN for admin access")
     weak_peppers = {None, "", "plutus-dev-pepper"}
     if config.TENANT_KEY_PEPPER in weak_peppers or config.TENANT_KEY_PEPPER == config.API_TOKEN:
-        log.warning(
-            "PLUTUS_TENANT_KEY_PEPPER is weak or equals admin token — "
-            "set a distinct secret in production"
+        raise RuntimeError(
+            "PLUTUS_TENANT_KEY_PEPPER must be set to a distinct secret in SaaS mode "
+            "(not empty, not plutus-dev-pepper, not equal to PLUTUS_API_TOKEN)"
         )
     from . import billing
 
@@ -94,7 +95,7 @@ def get_run_for_ctx(run_id: int, ctx: AuthContext | None) -> dict | None:
 
 
 def _path_requires_saas_auth(path: str) -> bool:
-    if path in SAAS_PUBLIC_PATHS:
+    if path in _public_paths():
         return False
     if any(path.startswith(prefix) for prefix in SAAS_PUBLIC_STORE_PREFIXES):
         return False

@@ -273,6 +273,28 @@ def migrate() -> None:
             "ALTER TABLE signup_verifications ALTER COLUMN api_key DROP NOT NULL"
         )
         con.execute(
+            "ALTER TABLE upload_batches ADD COLUMN IF NOT EXISTS analyze_started_at TIMESTAMPTZ"
+        )
+        con.execute(
+            """CREATE TABLE IF NOT EXISTS ui_sessions (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT,
+                api_key_id TEXT,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                csrf_token TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL
+            )"""
+        )
+        for stmt in (
+            "CREATE INDEX IF NOT EXISTS idx_upload_batches_status "
+            "ON upload_batches(status, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer ON tenants(stripe_customer_id)",
+            "CREATE INDEX IF NOT EXISTS idx_orders_stripe_session ON orders(stripe_session_id)",
+            "CREATE INDEX IF NOT EXISTS idx_orders_lab_poll ON orders(status, lab_status)",
+        ):
+            con.execute(stmt)
+        con.execute(
             "UPDATE tenants SET email_verified_at=created_at "
             "WHERE email_verified_at IS NULL"
         )

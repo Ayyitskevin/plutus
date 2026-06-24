@@ -120,4 +120,14 @@ def check_recommend_cap(tenant_id: str) -> None:
 
 
 def record_recommend(tenant_id: str) -> dict:
+    tenant = db.get_tenant(tenant_id)
+    if not tenant:
+        raise MeteringError(f"tenant not found: {tenant_id}")
+    cap = tenant.get("monthly_recommend_cap")
+    if cap and cap > 0:
+        if not db.try_increment_recommend_under_cap(tenant_id, int(cap)):
+            raise MeteringError(
+                f"monthly recommendation cap reached ({cap}); upgrade plan or wait for next period"
+            )
+        return db.get_tenant_usage(tenant_id)
     return db.increment_tenant_usage(tenant_id, recommends=1)

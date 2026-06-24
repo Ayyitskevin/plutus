@@ -11,6 +11,7 @@
 {% if catalog_message %}<p class="status-ok">{{ catalog_message }}</p>{% endif %}
 
 <form method="post" action="/ui/saas/app/catalog">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
 <div class="card">
   <table>
     <tr>

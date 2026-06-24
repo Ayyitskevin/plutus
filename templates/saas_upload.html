@@ -36,6 +36,7 @@
 
 <div class="card">
   <form method="post" action="/ui/saas/app/upload" enctype="multipart/form-data">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
     <label class="small">Gallery name
       <input type="text" name="gallery_name" required placeholder="Smith wedding finals">
     </label>
@@ -72,10 +73,12 @@
       <td>
         {% if b.status == 'ready' %}
         <form method="post" action="/ui/saas/app/upload/{{ b.id }}/analyze" class="inline-form">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
           <button type="submit" class="secondary">Analyze</button>
         </form>
         {% elif b.status == 'failed' %}
         <form method="post" action="/ui/saas/app/upload/{{ b.id }}/analyze" class="inline-form">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
           <button type="submit" class="secondary">Retry</button>
         </form>
         {% elif b.status in ['queued', 'analyzing'] %}

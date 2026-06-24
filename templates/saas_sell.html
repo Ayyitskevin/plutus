@@ -60,6 +60,7 @@
   </div>
   {% endfor %}
   <form method="post" action="/ui/saas/app/sell" style="margin-top:1.25rem">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
     <input type="hidden" name="action" value="publish_run">
     <input type="hidden" name="run_id" value="{{ run.id }}">
     <label class="small">Offer label (shown to client)
@@ -81,6 +82,7 @@
   <h3 style="margin-top:0">Upload &amp; publish</h3>
   <p class="small">Up to {{ max_files }} photos · {{ max_mb }}MB each</p>
   <form method="post" action="/ui/saas/app/sell" enctype="multipart/form-data">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
     <input type="hidden" name="action" value="upload_publish">
     <label class="small">Gallery name
       <input type="text" name="gallery_name" required placeholder="Smith wedding finals">

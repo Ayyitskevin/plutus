@@ -34,10 +34,11 @@ from . import (
     service,
     signup,
     storage,
+    ui_sessions,
     upload_worker,
     uploads,
 )
-from .auth import UI_TOKEN_COOKIE, require_bearer, resolve_auth
+from .auth import UI_TOKEN_COOKIE, require_bearer, resolve_auth, verify_ui_csrf
 from .auth_context import AuthContext
 from .metering import MeteringError
 from .orders import OrderError, create_bundle_checkout, simulate_test_payment
@@ -59,7 +60,7 @@ def _fmt_cents(cents: int) -> str:
 templates.env.filters["money"] = _fmt_cents
 
 
-def _ui_context(**extra) -> dict:
+def _ui_context(request: Request | None = None, **extra) -> dict:
     from . import argus_client, mise_client
 
     ctx = {
@@ -75,7 +76,12 @@ def _ui_context(**extra) -> dict:
         "mise_configured": mise_client.is_enabled(),
         "public_base": config.SAAS_PUBLIC_URL.rstrip("/"),
         "upload_async": config.UPLOAD_ASYNC_ANALYZE,
+        "csrf_token": "",
     }
+    if request is not None:
+        session = ui_sessions.get_session(request.cookies.get(ui_sessions.UI_SESSION_COOKIE))
+        if session:
+            ctx["csrf_token"] = session.get("csrf_token") or ""
     ctx.update(extra)
     return ctx
 
@@ -118,10 +124,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         stop_poll.set()
+        grace = config.SHUTDOWN_GRACE_SECONDS
         if poll_thread:
-            poll_thread.join(timeout=2)
+            poll_thread.join(timeout=grace)
         if upload_thread:
-            upload_thread.join(timeout=2)
+            upload_thread.join(timeout=grace)
 
 
 app = FastAPI(
@@ -403,7 +410,7 @@ def view_run(request: Request, run_id: int):
     return templates.TemplateResponse(
         request,
         "run.html",
-        _ui_context(
+        _ui_context(request, 
             run=row,
             bundles=payload.get("bundles") or [],
             top_photos=payload.get("top_photos") or [],
@@ -458,7 +465,7 @@ def store_landing(request: Request, slug: str):
     return templates.TemplateResponse(
         request,
         "store_landing.html",
-        _ui_context(tenant=tenant, title=tenant["name"]),
+        _ui_context(request, tenant=tenant, title=tenant["name"]),
     )
 
 
@@ -473,7 +480,7 @@ def store_offer(request: Request, slug: str, token: str):
     return templates.TemplateResponse(
         request,
         "store_offer.html",
-        _ui_context(
+        _ui_context(request, 
             title=offer["gallery_name"],
             tenant=offer["tenant"],
             gallery_name=offer["gallery_name"],
@@ -537,7 +544,7 @@ def store_order_track(request: Request, client_token: str):
     return templates.TemplateResponse(
         request,
         "client_order.html",
-        _ui_context(
+        _ui_context(request, 
             title="Your order",
             order=order,
             tenant=tenant,
@@ -565,7 +572,7 @@ def store_order_success(request: Request, session_id: str | None = Query(None)):
     return templates.TemplateResponse(
         request,
         "store_order.html",
-        _ui_context(
+        _ui_context(request, 
             title="Order confirmed",
             order=order,
             success=True,
@@ -581,7 +588,7 @@ def store_order_cancelled(request: Request, order_id: int | None = Query(None)):
     return templates.TemplateResponse(
         request,
         "store_order.html",
-        _ui_context(title="Checkout cancelled", order=order, success=False),
+        _ui_context(request, title="Checkout cancelled", order=order, success=False),
     )
 
 
@@ -642,7 +649,17 @@ async def stripe_webhook(request: Request):
         event = json.loads(payload.decode("utf-8"))
     except json.JSONDecodeError:
         return error("invalid json", 400)
-    billing.handle_webhook_event(event)
+    try:
+        billing.handle_webhook_event(event)
+    except Exception as exc:
+        log.exception("stripe webhook processing failed")
+        audit.record(
+            "billing.webhook",
+            request=request,
+            status="error",
+            detail={"type": event.get("type"), "error": str(exc)[:200]},
+        )
+        return error("webhook processing failed", 500)
     audit.record("billing.webhook", request=request, detail={"type": event.get("type")})
     return {"received": True}
 
@@ -677,7 +694,7 @@ def ui_saas_landing(request: Request):
     return templates.TemplateResponse(
         request,
         "saas_landing.html",
-        _ui_context(title="Plutus"),
+        _ui_context(request, title="Plutus"),
     )
 
 
@@ -685,7 +702,9 @@ def ui_saas_landing(request: Request):
 def ui_saas_login(request: Request):
     if not config.SAAS_MODE:
         return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse(request, "saas_login.html", _ui_context(title="Sign in"))
+    return templates.TemplateResponse(
+        request, "saas_login.html", _ui_context(request, title="Sign in")
+    )
 
 
 @app.post("/ui/saas/login")
@@ -698,13 +717,16 @@ def ui_saas_login_post(request: Request, api_token: str = Form(...)):
         return templates.TemplateResponse(
             request,
             "saas_login.html",
-            _ui_context(title="Sign in", login_error="Invalid API key or admin token"),
+            _ui_context(request, title="Sign in", login_error="Invalid API key or admin token"),
             status_code=401,
         )
     dest = "/ui/saas/app/admin" if ctx.is_admin else "/ui/saas/app"
     response = RedirectResponse(dest, status_code=303)
-    response.set_cookie(
-        UI_TOKEN_COOKIE, api_token.strip(), httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30
+    ui_sessions.attach_session_cookie(
+        response,
+        is_admin=ctx.is_admin,
+        tenant_id=ctx.tenant_id if ctx.tenant else None,
+        api_key_id=ctx.api_key_id,
     )
     return response
 
@@ -718,7 +740,7 @@ def ui_saas_signup(request: Request):
     return templates.TemplateResponse(
         request,
         "saas_signup.html",
-        _ui_context(
+        _ui_context(request, 
             title="Start free trial",
             trial_days=config.SIGNUP_TRIAL_DAYS,
             trial_cap=config.SIGNUP_TRIAL_RECOMMEND_CAP,
@@ -745,7 +767,7 @@ def ui_saas_signup_post(
         return templates.TemplateResponse(
             request,
             "saas_signup.html",
-            _ui_context(
+            _ui_context(request, 
                 title="Start free trial",
                 trial_days=config.SIGNUP_TRIAL_DAYS,
                 trial_cap=config.SIGNUP_TRIAL_RECOMMEND_CAP,
@@ -760,7 +782,7 @@ def ui_saas_signup_post(
         return templates.TemplateResponse(
             request,
             "saas_signup_pending.html",
-            _ui_context(
+            _ui_context(request, 
                 title="Confirm your email",
                 verify_email=result.get("verify_email"),
                 verify_token_hours=config.SIGNUP_VERIFY_TOKEN_HOURS,
@@ -779,12 +801,11 @@ def ui_saas_signup_post(
         try:
             session = billing.create_checkout_session(result["tenant"]["id"])
             response = RedirectResponse(session["checkout_url"], status_code=303)
-            response.set_cookie(
-                UI_TOKEN_COOKIE,
-                api_key,
-                httponly=True,
-                samesite="lax",
-                max_age=60 * 60 * 24 * 30,
+            ui_sessions.attach_session_cookie(
+                response,
+                is_admin=False,
+                tenant_id=result["tenant"]["id"],
+                api_key_id=result.get("key_id"),
             )
             return response
         except billing.BillingError:
@@ -792,7 +813,7 @@ def ui_saas_signup_post(
     response = templates.TemplateResponse(
         request,
         "saas_signup_welcome.html",
-        _ui_context(
+        _ui_context(request, 
             title="Welcome",
             tenant=result["tenant"],
             api_key=api_key,
@@ -801,12 +822,11 @@ def ui_saas_signup_post(
             trial_cap=config.SIGNUP_TRIAL_RECOMMEND_CAP,
         ),
     )
-    response.set_cookie(
-        UI_TOKEN_COOKIE,
-        api_key,
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24 * 30,
+    ui_sessions.attach_session_cookie(
+        response,
+        is_admin=False,
+        tenant_id=result["tenant"]["id"],
+        api_key_id=result.get("key_id"),
     )
     return response
 
@@ -819,7 +839,11 @@ def ui_saas_verify_email(request: Request, token: str | None = Query(None)):
         return templates.TemplateResponse(
             request,
             "saas_verify_email.html",
-            _ui_context(title="Email verification", verify_error="missing verification token"),
+            _ui_context(
+                request,
+                title="Email verification",
+                verify_error="missing verification token",
+            ),
             status_code=400,
         )
     try:
@@ -828,13 +852,13 @@ def ui_saas_verify_email(request: Request, token: str | None = Query(None)):
         return templates.TemplateResponse(
             request,
             "saas_verify_email.html",
-            _ui_context(title="Email verification", verify_error=str(exc)),
+            _ui_context(request, title="Email verification", verify_error=str(exc)),
             status_code=400,
         )
     response = templates.TemplateResponse(
         request,
         "saas_signup_welcome.html",
-        _ui_context(
+        _ui_context(request, 
             title="Welcome",
             tenant=result["tenant"],
             api_key=result["api_key"],
@@ -843,12 +867,11 @@ def ui_saas_verify_email(request: Request, token: str | None = Query(None)):
             trial_cap=config.SIGNUP_TRIAL_RECOMMEND_CAP,
         ),
     )
-    response.set_cookie(
-        UI_TOKEN_COOKIE,
-        result["api_key"],
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24 * 30,
+    ui_sessions.attach_session_cookie(
+        response,
+        is_admin=False,
+        tenant_id=result["tenant"]["id"],
+        api_key_id=result.get("key_id"),
     )
     audit.record(
         "tenant.signup.verified",
@@ -869,7 +892,7 @@ def ui_saas_signup_pending(request: Request, email: str | None = None):
     return templates.TemplateResponse(
         request,
         "saas_signup_pending.html",
-        _ui_context(
+        _ui_context(request, 
             title="Confirm your email",
             verify_email=addr,
             verify_token_hours=config.SIGNUP_VERIFY_TOKEN_HOURS,
@@ -886,22 +909,24 @@ def ui_saas_resend_verification(
     from . import signup_verify
 
     addr = email.strip()
-    ok = signup_verify.resend_for_email(addr)
-    resent = "1" if ok else "0"
+    signup_verify.resend_for_email(addr)
     if return_to == "pending":
         return RedirectResponse(
-            f"/ui/saas/signup/pending?email={quote_plus(addr)}&resent={resent}",
+            f"/ui/saas/signup/pending?email={quote_plus(addr)}&resent=1",
             status_code=303,
         )
     return RedirectResponse(
-        f"/ui/saas/login?resent={resent}&email={quote_plus(addr)}",
+        f"/ui/saas/login?resent=1&email={quote_plus(addr)}",
         status_code=303,
     )
 
 
 @app.post("/ui/logout")
-def ui_logout():
+def ui_logout(request: Request, csrf_token: str = Form("")):
+    verify_ui_csrf(request, csrf_token)
+    ui_sessions.delete_session(request.cookies.get(ui_sessions.UI_SESSION_COOKIE))
     response = RedirectResponse("/ui/saas/login", status_code=303)
+    response.delete_cookie(ui_sessions.UI_SESSION_COOKIE)
     response.delete_cookie(UI_TOKEN_COOKIE)
     return response
 
@@ -939,7 +964,7 @@ def ui_saas_tenant_app(request: Request):
     return templates.TemplateResponse(
         request,
         "saas_dashboard.html",
-        _ui_context(
+        _ui_context(request, 
             title="Dashboard",
             portal_mode="tenant",
             tenant=tenant,
@@ -995,7 +1020,7 @@ def ui_saas_admin_app(request: Request):
     return templates.TemplateResponse(
         request,
         "saas_dashboard.html",
-        _ui_context(
+        _ui_context(request, 
             title="Admin",
             portal_mode="admin",
             tenants=db.list_tenants(),
@@ -1065,7 +1090,7 @@ def _admin_tenant_context(
     tenant = db.get_tenant(tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="tenant not found")
-    return _ui_context(
+    return _ui_context(request, 
         title=f"Tenant {tenant_id}",
         tenant=tenant,
         usage=usage_snapshot(tenant_id),
@@ -1259,7 +1284,7 @@ def ui_saas_sell(
     return templates.TemplateResponse(
         request,
         "saas_sell.html",
-        _ui_context(
+        _ui_context(request, 
             title="Publish & sell",
             tenant=ctx.tenant,
             step=step,
@@ -1394,7 +1419,7 @@ def ui_saas_upload(
     return templates.TemplateResponse(
         request,
         "saas_upload.html",
-        _ui_context(
+        _ui_context(request, 
             title="Upload gallery",
             tenant=ctx.tenant,
             batches=db.list_upload_batches(tenant_id=ctx.tenant_id, limit=10),
@@ -1432,7 +1457,7 @@ async def ui_saas_upload_post(
         return templates.TemplateResponse(
             request,
             "saas_upload.html",
-            _ui_context(
+            _ui_context(request, 
                 title="Upload gallery",
                 tenant=ctx.tenant,
                 batches=db.list_upload_batches(tenant_id=ctx.tenant_id, limit=10),
@@ -1535,7 +1560,7 @@ def ui_saas_mise_galleries(request: Request):
     return templates.TemplateResponse(
         request,
         "saas_mise.html",
-        _ui_context(
+        _ui_context(request, 
             title="Mise galleries",
             tenant=ctx.tenant,
             galleries=galleries,
@@ -1600,7 +1625,7 @@ def ui_saas_tenant_catalog(request: Request, saved: str | None = Query(None)):
     return templates.TemplateResponse(
         request,
         "saas_catalog.html",
-        _ui_context(
+        _ui_context(request, 
             title="Product pricing",
             tenant=ctx.tenant,
             products=catalog.list_catalog(ctx.tenant_id),
@@ -1657,7 +1682,7 @@ def ui_saas_order_detail(request: Request, order_id: int):
     return templates.TemplateResponse(
         request,
         "saas_order.html",
-        _ui_context(
+        _ui_context(request, 
             title=f"Order {order_id}",
             order=order,
             tenant=tenant,
@@ -1685,7 +1710,7 @@ def ui_saas_tenant_issue_key(request: Request, label: str | None = Form(None)):
     return templates.TemplateResponse(
         request,
         "saas_dashboard.html",
-        _ui_context(
+        _ui_context(request, 
             title="Dashboard",
             portal_mode="tenant",
             tenant=ctx.tenant,
@@ -1775,7 +1800,7 @@ def ui_homelab_order_detail(request: Request, order_id: int):
     return templates.TemplateResponse(
         request,
         "saas_order.html",
-        _ui_context(
+        _ui_context(request, 
             title=f"Order {order_id}",
             order=order,
             tenant=tenant,
@@ -1828,7 +1853,7 @@ def ui_saas_billing(
     return templates.TemplateResponse(
         request,
         "saas_billing.html",
-        _ui_context(
+        _ui_context(request, 
             title="Billing",
             tenant=ctx.tenant,
             usage=usage,
@@ -1853,7 +1878,7 @@ def ui_saas_billing_checkout(request: Request):
         return templates.TemplateResponse(
             request,
             "saas_billing.html",
-            _ui_context(
+            _ui_context(request, 
                 title="Billing",
                 tenant=ctx.tenant,
                 usage=usage_snapshot(ctx.tenant_id),
@@ -1880,7 +1905,7 @@ def ui_saas_billing_portal(request: Request):
         return templates.TemplateResponse(
             request,
             "saas_billing.html",
-            _ui_context(
+            _ui_context(request, 
                 title="Billing",
                 tenant=ctx.tenant,
                 usage=usage_snapshot(ctx.tenant_id),

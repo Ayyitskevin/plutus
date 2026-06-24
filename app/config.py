@@ -63,11 +63,12 @@ SIGNUP_VERIFY_DEV_BYPASS = (
 
 # Mise publish hook — default SaaS tenant when flow POSTs without tenant_id
 MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None
-MISE_HOOK_TOKEN = (
-    os.environ.get("PLUTUS_MISE_HOOK_TOKEN")
-    or os.environ.get("PLUTUS_MISE_API_TOKEN")
-    or None
-)
+MISE_HOOK_TOKEN = os.environ.get("PLUTUS_MISE_HOOK_TOKEN") or None
+
+# Production hardening
+SAAS_DISABLE_OPENAPI = os.environ.get("PLUTUS_SAAS_DISABLE_OPENAPI", "true").lower() == "true"
+UPLOAD_ANALYZE_STALE_MINUTES = int(os.environ.get("PLUTUS_UPLOAD_ANALYZE_STALE_MINUTES", "15"))
+SHUTDOWN_GRACE_SECONDS = int(os.environ.get("PLUTUS_SHUTDOWN_GRACE_SECONDS", "30"))
 
 # Ops
 RATE_LIMIT_ENABLED = os.environ.get("PLUTUS_RATE_LIMIT_ENABLED", "true").lower() == "true"
