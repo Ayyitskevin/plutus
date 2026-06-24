@@ -69,9 +69,18 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Metrics: Prometheus at `/metrics` when `PLUTUS_PROMETHEUS_ENABLED=true`
 - Structured logs when `PLUTUS_STRUCTURED_LOGS=true`
 
+## Production wiring (scripts — apply when credentials ready)
+
+| Script | Purpose |
+|--------|---------|
+| `wire-mise-saas.sh` | Mise gallery index + media root for SaaS |
+| `wire-dionysus-saas.sh` | Dionysus pitch enrichment on :8031 |
+| `wire-r2.sh` / `wire-s3.sh` | Tenant gallery storage |
+| `wire-whcc.sh` | WHCC lab adapter |
+| `wire-public-url.sh` | `PLUTUS_SAAS_PUBLIC_URL` (+ optional Tailscale serve) |
+| `wire-tier7.sh` / `wire-tier8.sh` | Orchestrators (Tier 8 defaults to GitHub-only tests) |
+
 ## Not built yet
 
 - Signup email verification
-- Production S3 + real WHCC fulfillment
-- Mise auto-recommend on homelab dogfood (deferred)
-- LLM pitch copy layer (optional Dionysus handoff)
+- Public HTTPS hostname (Cloudflare tunnel) without manual tunnel setup

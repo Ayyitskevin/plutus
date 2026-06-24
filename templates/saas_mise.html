@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+  .secondary { background: #eee; color: var(--ink); }
+  .status-ok { color: var(--accent); }
+  .err { color: #a11; }
+  .small { font-size: .85rem; color: var(--muted); }
+  .badge { font-size: .72rem; background: var(--accent-soft); padding: .1rem .4rem; border-radius: 4px; }
+  .inline-form { display: inline; }
+</style>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem">
+    <h2 style="margin-top:0">Mise galleries</h2>
+    <div>
+      <a class="btn secondary" href="/ui/saas/app">Dashboard</a>
+      <a class="btn secondary" href="/ui/saas/app/sell">Publish &amp; sell</a>
+    </div>
+  </div>
+  <p class="small" style="margin:.5rem 0 0">
+    Pull published galleries from Mise on flow — Argus vision and Plutus bundles in one step.
+  </p>
+</div>
+
+{% if mise_message %}<p class="status-ok">{{ mise_message }}{% if mise_run_id %} <a href="/runs/{{ mise_run_id }}">View run #{{ mise_run_id }}</a> · <a href="/ui/saas/app/sell?run_id={{ mise_run_id }}">Publish offer</a>{% endif %}</p>{% endif %}
+{% if mise_error %}<p class="err">{{ mise_error }}</p>{% endif %}
+
+{% if not mise_configured %}
+<div class="card">
+  <p class="small">Mise is not configured on this Plutus instance.</p>
+  <p class="small">Wire with <code>bash scripts/wire-mise-saas.sh</code> (sets <code>PLUTUS_MISE_URL</code>, token, and media root).</p>
+</div>
+{% elif galleries %}
+<div class="card">
+  <table>
+    <tr>
+      <th>ID</th>
+      <th>Title</th>
+      <th>Published</th>
+      <th>Argus</th>
+      <th>Plutus</th>
+      <th></th>
+    </tr>
+    {% for g in galleries %}
+    <tr>
+      <td>{{ g.id }}</td>
+      <td>{{ g.title or '—' }}</td>
+      <td>{% if g.published %}<span class="badge">yes</span>{% else %}no{% endif %}</td>
+      <td class="small">{{ g.argus_last_status or '—' }}</td>
+      <td class="small">{{ g.plutus_last_status or '—' }}{% if g.plutus_last_run_id %} · #{{ g.plutus_last_run_id }}{% endif %}</td>
+      <td>
+        {% if g.published %}
+        <form class="inline-form" method="post" action="/ui/saas/app/mise/{{ g.id }}/recommend">
+          <button type="submit">Generate bundles</button>
+        </form>
+        {% else %}
+        <span class="small">publish in Mise first</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <p class="small">No galleries returned from Mise — check flow connectivity and <code>PLUTUS_MISE_API_TOKEN</code>.</p>
+</div>
+{% endif %}
+{% endblock %}

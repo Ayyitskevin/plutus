@@ -23,6 +23,7 @@
       <a class="btn" href="/ui/saas/app/sell">Publish &amp; sell</a>
       <a class="btn secondary" href="/ui/saas/billing">Billing</a>
       <a class="btn secondary" href="/ui/saas/app/upload">Upload</a>
+      {% if mise_configured %}<a class="btn secondary" href="/ui/saas/app/mise">Mise</a>{% endif %}
       <a class="btn secondary" href="/ui/saas/app/catalog">Pricing</a>
       <a class="btn secondary" href="/store/{{ tenant.store_slug }}">Storefront</a>
       {% endif %}

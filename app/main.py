@@ -59,7 +59,7 @@ templates.env.filters["money"] = _fmt_cents
 
 
 def _ui_context(**extra) -> dict:
-    from . import argus_client
+    from . import argus_client, mise_client
 
     ctx = {
         "saas_mode": config.SAAS_MODE,
@@ -71,6 +71,7 @@ def _ui_context(**extra) -> dict:
         "storage": storage.storage_status(),
         "argus": argus_client.vision_status() if argus_client.is_enabled() else None,
         "argus_auto_vision": config.ARGUS_AUTO_VISION,
+        "mise_configured": mise_client.is_enabled(),
         "public_base": config.SAAS_PUBLIC_URL.rstrip("/"),
         "upload_async": config.UPLOAD_ASYNC_ANALYZE,
     }
@@ -1328,6 +1329,97 @@ def ui_saas_upload_analyze(
         )
     metrics.inc_tenant(ctx.tenant_id, "recommend_upload")
     return RedirectResponse(f"/runs/{result['run_id']}", status_code=303)
+
+
+@app.get("/api/mise/galleries", response_class=JSONResponse)
+def api_mise_galleries(
+    published: bool | None = Query(None),
+    ctx: AuthContext = Depends(require_bearer),
+) -> JSONResponse:
+    from . import mise_client
+
+    if not mise_client.is_enabled():
+        raise HTTPException(status_code=503, detail="Mise API is not configured")
+    try:
+        body = mise_client.list_galleries(published=published)
+    except mise_client.MiseClientError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(body)
+
+
+@app.get("/ui/saas/app/mise", response_class=HTMLResponse)
+def ui_saas_mise_galleries(request: Request):
+    from . import mise_client
+
+    ctx = _tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    galleries: list[dict] = []
+    mise_error: str | None = None
+    if mise_client.is_enabled():
+        try:
+            body = mise_client.list_galleries(published=False)
+            galleries = body.get("galleries") or []
+        except mise_client.MiseClientError as exc:
+            mise_error = str(exc)
+    return templates.TemplateResponse(
+        request,
+        "saas_mise.html",
+        _ui_context(
+            title="Mise galleries",
+            tenant=ctx.tenant,
+            galleries=galleries,
+            mise_message="Bundles generated — publish an offer from Publish & sell."
+            if request.query_params.get("recommended")
+            else None,
+            mise_run_id=request.query_params.get("run_id"),
+            mise_error=mise_error or request.query_params.get("error"),
+        ),
+    )
+
+
+@app.post("/ui/saas/app/mise/{gallery_id}/recommend")
+def ui_saas_mise_recommend(
+    request: Request,
+    gallery_id: int,
+    argus_run_id: int | None = Form(None),
+):
+    ctx = _tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    try:
+        result = service.analyze_mise_gallery(
+            gallery_id,
+            argus_run_id=argus_run_id,
+            tenant_id=ctx.tenant_id,
+        )
+    except MeteringError as exc:
+        return RedirectResponse(
+            f"/ui/saas/app/mise?error={quote_plus(str(exc))}",
+            status_code=303,
+        )
+    except service.RecommendError as exc:
+        return RedirectResponse(
+            f"/ui/saas/app/mise?error={quote_plus(str(exc))}",
+            status_code=303,
+        )
+    except FileNotFoundError as exc:
+        return RedirectResponse(
+            f"/ui/saas/app/mise?error={quote_plus(str(exc))}",
+            status_code=303,
+        )
+    metrics.inc_tenant(ctx.tenant_id, "recommend_mise")
+    audit.record(
+        "recommend.mise",
+        request=request,
+        ctx=ctx,
+        resource=str(result["run_id"]),
+        detail={"mise_gallery_id": gallery_id},
+    )
+    return RedirectResponse(
+        f"/ui/saas/app/mise?recommended=1&run_id={result['run_id']}",
+        status_code=303,
+    )
 
 
 @app.get("/ui/saas/app/catalog", response_class=HTMLResponse)

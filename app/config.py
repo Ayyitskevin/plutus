@@ -133,6 +133,7 @@ DIONYSUS_TIMEOUT = int(os.environ.get("PLUTUS_DIONYSUS_TIMEOUT", "10"))
 ORDER_ALERT_EMAIL = os.environ.get("PLUTUS_ORDER_ALERT_EMAIL") or None
 ORDER_WEBHOOK_URL = os.environ.get("PLUTUS_ORDER_WEBHOOK_URL") or None
 NOTIFY_LAB_SHIPPED = os.environ.get("PLUTUS_NOTIFY_LAB_SHIPPED", "true").lower() == "true"
+NOTIFY_CLIENT_ON_PAID = os.environ.get("PLUTUS_NOTIFY_CLIENT_ON_PAID", "true").lower() == "true"
 
 # SaaS publish wizard — max wait for async upload analyze
 SELL_ANALYZE_TIMEOUT = int(os.environ.get("PLUTUS_SELL_ANALYZE_TIMEOUT", "600"))

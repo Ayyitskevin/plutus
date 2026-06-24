@@ -99,6 +99,21 @@ def notify_order_paid(order_id: int) -> dict[str, bool]:
     subject = f"[Plutus] Order #{order['id']} paid — {tenant.get('name', order['tenant_id'])}"
     recipients = _order_recipients(tenant)
     emailed = any(_send_email(to=addr, subject=subject, body=body) for addr in recipients)
+    client_emailed = False
+    if config.NOTIFY_CLIENT_ON_PAID and order.get("client_email") and order.get("client_token"):
+        from .order_tracking import client_track_url
+
+        studio = tenant.get("name") or order["tenant_id"]
+        track = client_track_url(order["client_token"])
+        client_body = (
+            f"Thanks — your order with {studio} is confirmed.\n\n"
+            f"Track fulfillment anytime:\n{track}\n"
+        )
+        client_emailed = _send_email(
+            to=order["client_email"],
+            subject=f"Order confirmed — {studio}",
+            body=client_body,
+        )
     webhook = _post_webhook(
         {
             "event": "order.paid",
@@ -110,7 +125,7 @@ def notify_order_paid(order_id: int) -> dict[str, bool]:
             "lab_status": order.get("lab_status"),
         }
     )
-    return {"email": emailed, "webhook": webhook}
+    return {"email": emailed, "webhook": webhook, "client_email": client_emailed}
 
 
 def notify_lab_status(order_id: int, status: str) -> dict[str, bool]:
