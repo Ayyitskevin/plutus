@@ -35,8 +35,9 @@ def mise_gallery_published_webhook(
         tenant_id=tenant_id,
         argus_run_id=argus_run_id,
         limit=limit,
+        from_webhook=True,
     )
-    scope = mise_hook.resolve_hook_tenant_id(tenant_id)
+    scope = mise_hook.resolve_hook_tenant_id(tenant_id, from_webhook=True)
     if scope:
         metrics.inc_tenant(scope, "recommend_mise")
         audit.record(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from collections import defaultdict, deque
 from threading import Lock
@@ -49,6 +50,35 @@ def _limit_for(request: Request) -> int:
     if request.url.path in RECOMMEND_PATHS:
         return config.RATE_LIMIT_RECOMMEND_PER_MINUTE
     return config.RATE_LIMIT_PER_MINUTE
+
+
+def validate_rate_limit_backend() -> None:
+    """Fail fast in multi-worker SaaS when shared rate-limit state is unavailable."""
+    if not config.SAAS_MODE or not config.RATE_LIMIT_ENABLED:
+        return
+    if "pytest" in sys.modules:
+        return
+    if not config.REDIS_URL:
+        raise RuntimeError(
+            "PLUTUS_REDIS_URL required when PLUTUS_SAAS_MODE and PLUTUS_RATE_LIMIT_ENABLED "
+            "(in-memory limits are per-process only)"
+        )
+    global _redis_client, _redis_unavailable
+    try:
+        import redis
+    except ImportError as exc:
+        raise RuntimeError(
+            "PLUTUS_REDIS_URL is set but the redis package is not installed"
+        ) from exc
+    try:
+        client = redis.from_url(config.REDIS_URL, decode_responses=True)
+        client.ping()
+        _redis_client = client
+        _redis_unavailable = False
+    except Exception as exc:
+        raise RuntimeError(
+            f"PLUTUS_REDIS_URL is set but Redis is unreachable: {exc}"
+        ) from exc
 
 
 def _get_redis():

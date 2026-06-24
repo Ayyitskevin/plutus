@@ -21,7 +21,9 @@ def verify_hook_token(request: Request) -> None:
         raise HTTPException(status_code=401, detail="invalid hook token")
 
 
-def resolve_hook_tenant_id(explicit: str | None) -> str | None:
+def resolve_hook_tenant_id(explicit: str | None, *, from_webhook: bool = False) -> str | None:
+    if from_webhook and config.SAAS_MODE:
+        return config.MISE_HOOK_TENANT_ID
     if explicit and explicit.strip():
         return explicit.strip()
     if config.SAAS_MODE:
@@ -38,8 +40,9 @@ def recommend_published_gallery(
     tenant_id: str | None,
     argus_run_id: int | None = None,
     limit: int | None = None,
+    from_webhook: bool = False,
 ) -> dict:
-    scope = resolve_hook_tenant_id(tenant_id)
+    scope = resolve_hook_tenant_id(tenant_id, from_webhook=from_webhook)
     if config.SAAS_MODE and not scope:
         raise HTTPException(
             status_code=400,

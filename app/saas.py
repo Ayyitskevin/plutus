@@ -7,7 +7,7 @@ import sys
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import config, db
+from . import config, db, rate_limit
 from .auth import resolve_auth
 from .auth_context import AuthContext
 
@@ -80,6 +80,11 @@ def validate_saas_startup() -> None:
             )
         if not config.STRIPE_WEBHOOK_SECRET:
             log.warning("STRIPE_WEBHOOK_SECRET unset — /webhooks/stripe will reject events")
+    if config.MISE_HOOK_TOKEN and not config.MISE_HOOK_TENANT_ID:
+        raise RuntimeError(
+            "PLUTUS_MISE_HOOK_TENANT_ID required when PLUTUS_MISE_HOOK_TOKEN is set in SaaS mode"
+        )
+    rate_limit.validate_rate_limit_backend()
 
 
 def tenant_scope(ctx: AuthContext | None) -> str | None:

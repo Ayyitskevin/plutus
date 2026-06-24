@@ -44,8 +44,11 @@ if [[ "${PLUTUS_SAAS_MODE:-false}" == "true" ]]; then
   if [[ -n "${STRIPE_SECRET_KEY:-}" ]]; then
     check_not_placeholder STRIPE_SECRET_KEY
   fi
-  if [[ "${PLUTUS_RATE_LIMIT_ENABLED:-true}" == "true" && -z "${PLUTUS_REDIS_URL:-}" ]]; then
-    echo "WARN: PLUTUS_REDIS_URL unset — rate limits are per-process only"
+  if [[ "${PLUTUS_RATE_LIMIT_ENABLED:-true}" == "true" ]]; then
+    check_not_placeholder PLUTUS_REDIS_URL
+  fi
+  if [[ -n "${PLUTUS_MISE_HOOK_TOKEN:-}" ]]; then
+    check_not_placeholder PLUTUS_MISE_HOOK_TENANT_ID
   fi
 fi
 
