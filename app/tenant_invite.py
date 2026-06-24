@@ -23,6 +23,13 @@ def claim_url(token: str) -> str:
     return f"{base}/ui/saas/claim-invite?token={token}"
 
 
+def pending_claim_url(tenant_id: str) -> str | None:
+    row = db.get_pending_tenant_invite(tenant_id)
+    if not row:
+        return None
+    return claim_url(row["token"])
+
+
 def create_invite(*, tenant_id: str, email: str) -> str:
     """Invalidate pending invites and mint a fresh claim token."""
     db.revoke_pending_tenant_invites(tenant_id)

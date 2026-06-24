@@ -74,6 +74,25 @@ def test_claim_invite_issues_key_and_logs_in(saas_client):
     assert b"already claimed" in r2.content
 
 
+def test_admin_tenant_page_shows_pending_invite_url(saas_client):
+    from app import tenant_invite
+
+    tenants.create_tenant("show", name="Show Studio", store_slug="show")
+    db.update_tenant("show", notify_email="ops@show.test")
+    token = tenant_invite.create_invite(tenant_id="show", email="ops@show.test")
+    claim = tenant_invite.claim_url(token)
+
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    r = saas_client.get("/ui/saas/app/admin/tenants/show")
+    assert r.status_code == 200
+    assert claim.encode() in r.content
+    assert b"Pending claim link" in r.content
+
+
 def test_resend_welcome_rotates_invite_token(saas_client):
     from app import tenant_invite
 

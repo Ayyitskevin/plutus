@@ -199,6 +199,12 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `storefront.link_tenant_for_bearer` — shared tenant resolution for share-links + integrations
 - mnemosyne `plutus_api` calls `/integrations/offer`
 
+## M8 — invite ops polish (GitHub)
+
+- Admin tenant page shows **pending claim link** when an unclaimed invite exists (copy-paste fallback)
+- `invite_kit` includes the live claim URL when pending
+- `scripts/dogfood-claim-invite.sh` — SMTP welcome email → claim UI → API key + session E2E
+
 ## M7 — container CI + homelab deploy helper (GitHub)
 
 - `scripts/ci-docker.sh` + CI `docker-smoke` job — image build + `/healthz` in container

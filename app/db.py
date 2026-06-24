@@ -660,6 +660,31 @@ def get_tenant_invite(token: str) -> dict | None:
     return dict(row)
 
 
+def get_pending_tenant_invite(tenant_id: str) -> dict | None:
+    with connection() as con:
+        row = con.execute(
+            """SELECT * FROM tenant_invites
+               WHERE tenant_id=? AND claimed_at IS NULL
+               ORDER BY created_at DESC LIMIT 1""",
+            (tenant_id,),
+        ).fetchone()
+    if not row:
+        return None
+    invite = dict(row)
+    expires = invite.get("expires_at")
+    if not expires:
+        return invite
+    try:
+        exp_dt = datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+        if exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=UTC)
+        if datetime.now(UTC) > exp_dt:
+            return None
+    except ValueError:
+        return None
+    return invite
+
+
 def revoke_pending_tenant_invites(tenant_id: str) -> None:
     with connection() as con:
         con.execute(

@@ -33,7 +33,10 @@ def _send_email(*, to: str, subject: str, body: str) -> bool:
         smtp = smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15)
         try:
             if config.SMTP_USER and config.SMTP_PASSWORD:
-                smtp.starttls()
+                smtp.ehlo()
+                if smtp.has_extn("starttls"):
+                    smtp.starttls()
+                    smtp.ehlo()
                 smtp.login(config.SMTP_USER, config.SMTP_PASSWORD)
             smtp.send_message(msg)
         finally:

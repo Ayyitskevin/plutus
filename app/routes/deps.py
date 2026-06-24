@@ -93,16 +93,27 @@ def admin_tenant_context(
     tenant = db.get_tenant(tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="tenant not found")
+    from .. import tenant_invite
+
     login_url = f"{config.SAAS_PUBLIC_URL.rstrip('/')}/ui/saas/login"
     slug = tenant.get("store_slug") or tenant_id
     store_url = f"{config.SAAS_PUBLIC_URL.rstrip('/')}/store/{slug}"
-    invite_kit = (
-        f"Plutus invite — {tenant.get('name') or tenant_id}\n\n"
-        f"Storefront: {store_url}\n\n"
-        "Open the one-time link in your welcome email to reveal your API key, "
-        "then sign in at:\n"
-        f"{login_url}"
-    )
+    pending_invite_url = tenant_invite.pending_claim_url(tenant_id)
+    if pending_invite_url:
+        invite_kit = (
+            f"Plutus invite — {tenant.get('name') or tenant_id}\n\n"
+            f"One-time claim link (reveals API key):\n{pending_invite_url}\n\n"
+            f"Storefront: {store_url}\n"
+            f"Sign in after claiming: {login_url}"
+        )
+    else:
+        invite_kit = (
+            f"Plutus invite — {tenant.get('name') or tenant_id}\n\n"
+            f"Storefront: {store_url}\n\n"
+            "Open the one-time link in your welcome email to reveal your API key, "
+            "then sign in at:\n"
+            f"{login_url}"
+        )
     return ui_context(
         request,
         title=f"Tenant {tenant_id}",
@@ -115,5 +126,6 @@ def admin_tenant_context(
         issued_api_key=issued_api_key,
         login_url=login_url,
         invite_kit=invite_kit,
+        pending_invite_url=pending_invite_url,
         smtp_ready=notifications.smtp_ready(),
     )

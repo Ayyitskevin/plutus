@@ -31,6 +31,10 @@
 <div class="card">
   <h3 style="margin-top:0">Invite kit</h3>
   <p class="small">Share with the photographer (paste into email or Slack).</p>
+  {% if pending_invite_url %}
+  <p class="small"><strong>Pending claim link</strong> — copy if the welcome email didn't arrive:</p>
+  <code style="display:block;word-break:break-all;font-size:.82rem;margin:.5rem 0">{{ pending_invite_url }}</code>
+  {% endif %}
   <textarea readonly rows="5" style="width:100%;font-size:.85rem;margin:.5rem 0">{{ invite_kit }}</textarea>
   {% if tenant.notify_email and smtp_ready %}
   <form method="post" action="/ui/saas/app/admin/tenants/{{ tenant.id }}/resend-welcome" class="inline-form">

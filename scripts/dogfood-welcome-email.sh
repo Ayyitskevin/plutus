@@ -40,8 +40,9 @@ os.chdir("${ROOT}")
 os.environ["PLUTUS_SMTP_HOST"] = "127.0.0.1"
 os.environ["PLUTUS_SMTP_PORT"] = "${PORT}"
 os.environ["PLUTUS_SMTP_FROM"] = "plutus@dogfood.test"
-os.environ.pop("PLUTUS_SMTP_USER", None)
-os.environ.pop("PLUTUS_SMTP_PASSWORD", None)
+os.environ["PLUTUS_SMTP_USER"] = ""
+os.environ["PLUTUS_SMTP_PASSWORD"] = ""
+os.environ.pop("PLUTUS_DATABASE_URL", None)
 os.environ["PLUTUS_SAAS_PUBLIC_URL"] = "http://plutus.test"
 
 from app import config, db, notifications, tenants
