@@ -153,6 +153,7 @@ def ui_saas_admin_create_tenant(
     tenant_id: str = Form(...),
     name: str = Form(...),
     store_slug: str | None = Form(None),
+    notify_email: str | None = Form(None),
     monthly_recommend_cap: str | None = Form(None),
 ):
     ctx = admin_ui_redirect(request)
@@ -174,16 +175,36 @@ def ui_saas_admin_create_tenant(
         )
     except TenantError as exc:
         return RedirectResponse(f"/ui/saas/app/admin?error={quote_plus(str(exc))}", status_code=303)
-    db.update_tenant(tenant["id"], email_verified_at=datetime.now(UTC).isoformat())
+    addr = (notify_email or "").strip().lower()
+    fields: dict = {"email_verified_at": datetime.now(UTC).isoformat()}
+    if addr:
+        fields["notify_email"] = addr
+    db.update_tenant(tenant["id"], **fields)
+    tenant = db.get_tenant(tenant["id"]) or tenant
     audit.record("admin.tenant.create", request=request, ctx=ctx, tenant_id=tenant["id"])
     issued = tenants.issue_api_key(tenant["id"], label="bootstrap")
+    welcome_sent = False
+    if addr and notifications.smtp_ready():
+        welcome_sent = notifications.send_tenant_welcome_email(
+            to=addr,
+            tenant=tenant,
+            api_key=issued["api_key"],
+        )
+    if welcome_sent:
+        admin_message = f"Tenant created. Welcome email sent to {addr}."
+    elif addr and not notifications.smtp_ready():
+        admin_message = (
+            "Tenant created. SMTP not configured — share the API key manually."
+        )
+    else:
+        admin_message = "Tenant created."
     return templates.TemplateResponse(
         request,
         "saas_admin_tenant.html",
         admin_tenant_context(
             request,
             tenant["id"],
-            admin_message="Tenant created.",
+            admin_message=admin_message,
             issued_api_key=issued["api_key"],
         ),
     )

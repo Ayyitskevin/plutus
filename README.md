@@ -16,9 +16,9 @@ and [dionysus](https://github.com/Ayyitskevin/dionysus).
 | Mode | Port | Highlights |
 |------|------|------------|
 | **Homelab** | `8030` | Folder analyze, Mise gallery hook, mock/vision recommend, pitch export |
-| **SaaS** | `8031` | Multi-tenant auth, self-signup + email verify, uploads (local/S3), async Argus vision, share links, Stripe checkout, lab mock/WHCC stub, Mise hook |
+| **SaaS** | `8031` | Multi-tenant auth, admin-invite onboarding (+ optional self-signup), uploads (local/S3), async Argus vision, share links, Stripe checkout, lab mock/WHCC stub, Mise hook |
 
-**SaaS flow:** signup (optional email verify) → upload gallery → Argus auto-vision (background) → vision-aware bundles → share offer link → client Stripe checkout → order + lab poll.
+**SaaS flow:** admin creates tenant (welcome email with API key) → upload gallery → Argus auto-vision (background) → vision-aware bundles → share offer link → client Stripe checkout → order + lab poll. Set `PLUTUS_SIGNUP_ENABLED=true` to open public self-service signup.
 
 ## Quickstart — homelab
 

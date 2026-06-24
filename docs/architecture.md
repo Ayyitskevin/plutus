@@ -180,6 +180,12 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - `scripts/wire-cloudflare-flow.sh` — `plutus.kleephotography.com` via flow's `mise` tunnel → `strix-halo-a9-mega:8031`
 - DNS CNAME routed; one-time `sudo cp` + `systemctl restart cloudflared` on flow activates ingress
 
+## M2 — operator-led onboarding (GitHub)
+
+- `PLUTUS_SIGNUP_ENABLED` defaults false — public signup closed; invite via admin UI
+- Admin create tenant accepts **notify email**; sends welcome email with bootstrap API key when SMTP armed
+- `notifications.send_tenant_welcome_email` — login, dashboard, storefront, getting-started steps
+
 ## Not built yet
 
 - WHCC live API credentials on production fleet (HMAC + stub path ready; `scripts/wire-whcc.sh`)

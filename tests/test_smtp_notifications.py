@@ -123,6 +123,54 @@ def test_dashboard_send_test_email(saas_client):
     assert b"Test email sent" in page.content
 
 
+def test_admin_create_tenant_sends_welcome_email(saas_client):
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    with patch("app.notifications.send_tenant_welcome_email", return_value=True) as send:
+        r = saas_client.post(
+            "/ui/saas/app/admin/tenants",
+            data={
+                "tenant_id": "invite",
+                "name": "Invite Studio",
+                "store_slug": "invite-studio",
+                "notify_email": "photo@invite.test",
+            },
+            follow_redirects=False,
+        )
+    assert r.status_code == 200
+    assert b"Welcome email sent" in r.content
+    send.assert_called_once()
+    assert send.call_args.kwargs["to"] == "photo@invite.test"
+    tenant = db.get_tenant("invite")
+    assert tenant and tenant["notify_email"] == "photo@invite.test"
+
+
+def test_admin_create_tenant_skips_welcome_without_smtp(saas_client, monkeypatch):
+    monkeypatch.setattr(config, "SMTP_HOST", None)
+    monkeypatch.setattr(config, "SMTP_FROM", None)
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    with patch("app.notifications.send_tenant_welcome_email") as send:
+        r = saas_client.post(
+            "/ui/saas/app/admin/tenants",
+            data={
+                "tenant_id": "nosmtp",
+                "name": "No SMTP",
+                "notify_email": "photo@nosmtp.test",
+            },
+            follow_redirects=False,
+        )
+    assert r.status_code == 200
+    assert b"SMTP not configured" in r.content
+    send.assert_not_called()
+
+
 def test_dashboard_test_requires_notify_email(saas_client):
     tenants.create_tenant("empty", name="Empty", store_slug="empty")
     db.update_tenant("empty", email_verified_at="2026-01-01T00:00:00+00:00")

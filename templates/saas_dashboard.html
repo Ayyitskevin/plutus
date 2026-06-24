@@ -236,6 +236,8 @@
     {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
       <label class="small">Tenant ID <input type="text" name="tenant_id" required></label>
       <label class="small">Name <input type="text" name="name" required></label>
+      <label class="small">Notify email <input type="email" name="notify_email" placeholder="photographer@studio.com"></label>
+      <p class="small" style="margin:-.25rem 0 .5rem">Sends a welcome email with the bootstrap API key when SMTP is configured.</p>
       <label class="small">Store slug <input type="text" name="store_slug" placeholder="optional"></label>
       <label class="small">Monthly recommend cap <input type="number" name="monthly_recommend_cap" placeholder="optional"></label>
       <button type="submit" style="margin-top:.5rem">Create</button>

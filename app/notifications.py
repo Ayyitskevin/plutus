@@ -118,6 +118,35 @@ def resend_client_confirmation(order_id: int) -> bool:
     )
 
 
+def send_tenant_welcome_email(*, to: str, tenant: dict, api_key: str) -> bool:
+    """Welcome a photographer invited by an admin — API key + getting-started links."""
+    studio = tenant.get("name") or tenant.get("id") or "your studio"
+    slug = tenant.get("store_slug") or tenant.get("id") or ""
+    base = config.SAAS_PUBLIC_URL.rstrip("/")
+    login_url = f"{base}/ui/saas/login"
+    dashboard_url = f"{base}/ui/saas/app"
+    store_url = f"{base}/store/{slug}" if slug else base
+    body = (
+        f"Welcome to Plutus, {studio}!\n\n"
+        "Your studio account is ready. Copy your API key now — it won't be shown again "
+        "in the dashboard.\n\n"
+        f"API key:\n{api_key}\n\n"
+        f"Sign in: {login_url}\n"
+        f"Dashboard: {dashboard_url}\n"
+        f"Storefront: {store_url}\n\n"
+        "Getting started:\n"
+        "1. Sign in with your API key\n"
+        "2. Upload a gallery (vision runs automatically when Argus is wired)\n"
+        "3. Tune bundles, then create a client offer link\n"
+        "4. Clients checkout with Stripe; you get order notifications at this email\n"
+    )
+    return _send_email(
+        to=to,
+        subject=f"[Plutus] Welcome — {studio}",
+        body=body,
+    )
+
+
 def send_test_email(*, to: str, tenant: dict) -> bool:
     """Send a dashboard test notification to verify SMTP delivery."""
     studio = tenant.get("name") or tenant.get("id") or "your studio"
