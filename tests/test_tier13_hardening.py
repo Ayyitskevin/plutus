@@ -43,9 +43,12 @@ def test_audit_retention_respects_config(tmp_path, monkeypatch):
     assert audit_retention.purge_stale_audit_events() == 1
 
 
-def test_health_includes_redis_when_saas(monkeypatch):
+def test_health_includes_redis_when_saas(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "SAAS_MODE", True)
     monkeypatch.setattr(config, "REDIS_URL", "redis://127.0.0.1:6379/0")
+    db.migrate()
     redis_ok = {"status": "ok", "configured": True, "reachable": True}
     with patch.object(redis_client, "ping_status", return_value=redis_ok):
         report = health.build_health_report()

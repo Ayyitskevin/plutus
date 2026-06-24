@@ -52,7 +52,9 @@ def test_billing_checkout_cookie_auth(saas_client):
     assert r.headers["location"] == "https://checkout.stripe.test/sub"
 
 
-def test_tenant_subscription_view():
+def test_tenant_subscription_view(monkeypatch):
+    monkeypatch.setattr(config, "STRIPE_SECRET_KEY", "sk_test_fake")
+    monkeypatch.setattr(config, "STRIPE_PRICE_ID", "price_test_fake")
     tenant = {
         "billing_status": "trialing",
         "plan_tier": "trial",
