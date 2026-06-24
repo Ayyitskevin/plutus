@@ -25,7 +25,8 @@ updates = {
 if "${SMTP_USER}":
     updates["PLUTUS_SMTP_USER"] = "${SMTP_USER}"
 if "${SMTP_PASSWORD}":
-    updates["PLUTUS_SMTP_PASSWORD"] = "${SMTP_PASSWORD}"
+    # Quote passwords with spaces so bash `source .env` stays valid.
+    updates["PLUTUS_SMTP_PASSWORD"] = '"' + "${SMTP_PASSWORD}".replace('"', "") + '"'
 lines = env_path.read_text().splitlines() if env_path.exists() else []
 out, seen = [], set()
 for line in lines:
