@@ -62,6 +62,31 @@ def test_share_link_api_returns_public_url(saas_client):
     assert body["store_slug"] == "shop1"
 
 
+def test_store_offer_rejects_expired_and_malformed_expiry(saas_client):
+    api_key, run_id = _tenant_run("shop-exp")
+    from app.storefront import StorefrontError, resolve_offer
+
+    link = db.create_storefront_token(
+        token="expired-offer",
+        tenant_id="shop-exp",
+        run_id=run_id,
+        label="Expired",
+        expires_at="2000-01-01T00:00:00+00:00",
+    )
+    with pytest.raises(StorefrontError, match="expired"):
+        resolve_offer("shop-exp", link["token"])
+
+    db.create_storefront_token(
+        token="bad-expiry",
+        tenant_id="shop-exp",
+        run_id=run_id,
+        label="Bad",
+        expires_at="not-a-date",
+    )
+    with pytest.raises(StorefrontError, match="expired"):
+        resolve_offer("shop-exp", "bad-expiry")
+
+
 def test_store_offer_and_checkout_session(saas_client):
     api_key, run_id = _tenant_run("shop2")
     from app.storefront import create_share_link

@@ -55,6 +55,31 @@ def test_admin_create_tenant_and_issue_key(saas_client):
     assert tenant["store_slug"] == "acme-photo"
 
 
+def test_admin_patch_rejects_duplicate_store_slug(saas_client):
+    from app import tenants
+
+    tenants.create_tenant("alpha", name="Alpha", store_slug="alpha-shop")
+    tenants.create_tenant("beta", name="Beta", store_slug="beta-shop")
+
+    r = saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    r = saas_client.post(
+        "/ui/saas/app/admin/tenants/beta",
+        data={"store_slug": "alpha-shop", "active": "1"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "store+slug+already+taken" in r.headers["location"]
+
+    beta = db.get_tenant("beta")
+    assert beta["store_slug"] == "beta-shop"
+
+
 def test_tenant_scoped_run_and_storefront(saas_client, tmp_path, monkeypatch):
     tenants.create_tenant("studio", name="Studio One", store_slug="studio-one")
     issued = tenants.issue_api_key("studio")

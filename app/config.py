@@ -66,7 +66,6 @@ MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None
 MISE_HOOK_TOKEN = (
     os.environ.get("PLUTUS_MISE_HOOK_TOKEN")
     or os.environ.get("PLUTUS_MISE_API_TOKEN")
-    or os.environ.get("PLUTUS_API_TOKEN")
     or None
 )
 

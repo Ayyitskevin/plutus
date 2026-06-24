@@ -41,7 +41,7 @@ def create_pending_verification(
     *,
     tenant_id: str,
     email: str,
-    api_key: str,
+    key_id: str,
 ) -> str | None:
     """Store verification token; return token when email verification is active."""
     if not verification_enabled():
@@ -53,7 +53,7 @@ def create_pending_verification(
         token=token,
         tenant_id=tenant_id,
         email=email.strip().lower(),
-        api_key=api_key,
+        key_id=key_id,
         expires_at=expires.isoformat(),
     )
     return token
@@ -92,8 +92,8 @@ def verify_token(token: str) -> dict:
                 raise SignupVerifyError(
                     "verification link expired — sign up again or contact support"
                 )
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise SignupVerifyError("invalid verification link") from exc
     tenant_id = row["tenant_id"]
     tenant = db.get_tenant(tenant_id)
     if not tenant:
@@ -102,9 +102,20 @@ def verify_token(token: str) -> dict:
     db.mark_signup_verification_verified(token.strip(), verified_at=now)
     db.update_tenant(tenant_id, email_verified_at=now, notify_email=row["email"])
     tenant = db.get_tenant(tenant_id) or tenant
+    from . import tenants
+
+    key_id = row.get("key_id")
+    if key_id:
+        tenants.revoke_key(key_id)
+        issued = tenants.issue_api_key(tenant_id, label="signup")
+        api_key = issued["api_key"]
+    elif row.get("api_key"):
+        api_key = row["api_key"]
+    else:
+        raise SignupVerifyError("invalid verification link")
     return {
         "tenant": tenant,
-        "api_key": row["api_key"],
+        "api_key": api_key,
         "store_url": f"/store/{tenant.get('store_slug') or tenant_id}",
     }
 

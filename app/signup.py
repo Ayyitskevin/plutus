@@ -73,7 +73,7 @@ def register_studio(
     verify_token = signup_verify.create_pending_verification(
         tenant_id=tenant_id,
         email=addr,
-        api_key=issued["api_key"],
+        key_id=issued["key_id"],
     )
     if verify_token:
         signup_verify.send_verification_email(

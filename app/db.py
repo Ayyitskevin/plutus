@@ -252,12 +252,16 @@ def _sqlite_migrate() -> None:
                 token TEXT PRIMARY KEY,
                 tenant_id TEXT NOT NULL,
                 email TEXT NOT NULL,
-                api_key TEXT NOT NULL,
+                key_id TEXT,
+                api_key TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 expires_at TEXT NOT NULL,
                 verified_at TEXT
             )"""
         )
+        signup_cols = {r[1] for r in con.execute("PRAGMA table_info(signup_verifications)")}
+        if "key_id" not in signup_cols:
+            con.execute("ALTER TABLE signup_verifications ADD COLUMN key_id TEXT")
         con.execute(
             "CREATE INDEX IF NOT EXISTS idx_signup_verify_tenant "
             "ON signup_verifications(tenant_id, created_at)"
@@ -504,15 +508,15 @@ def insert_signup_verification(
     token: str,
     tenant_id: str,
     email: str,
-    api_key: str,
+    key_id: str,
     expires_at: str,
 ) -> None:
     with connection() as con:
         con.execute(
             """INSERT INTO signup_verifications
-               (token, tenant_id, email, api_key, expires_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (token, tenant_id, email, api_key, expires_at),
+               (token, tenant_id, email, key_id, api_key, expires_at)
+               VALUES (?, ?, ?, ?, '', ?)""",
+            (token, tenant_id, email, key_id, expires_at),
         )
 
 

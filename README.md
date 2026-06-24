@@ -11,14 +11,14 @@ Part of the Kevin Lee photography suite alongside [mise](https://github.com/Ayyi
 [argus](https://github.com/Ayyitskevin/argus), [mnemosyne](https://github.com/Ayyitskevin/mnemosyne),
 and [dionysus](https://github.com/Ayyitskevin/dionysus).
 
-## What's built (Phases 0–7)
+## What's built (Phases 0–9)
 
 | Mode | Port | Highlights |
 |------|------|------------|
 | **Homelab** | `8030` | Folder analyze, Mise gallery hook, mock/vision recommend, pitch export |
-| **SaaS** | `8031` | Multi-tenant auth, self-signup + trial, uploads (local/S3), async Argus vision, share links, Stripe checkout, lab mock/WHCC stub |
+| **SaaS** | `8031` | Multi-tenant auth, self-signup + email verify, uploads (local/S3), async Argus vision, share links, Stripe checkout, lab mock/WHCC stub, Mise hook |
 
-**SaaS flow:** signup → upload gallery → Argus auto-vision (background) → vision-aware bundles → share offer link → client Stripe checkout → order + lab poll.
+**SaaS flow:** signup (optional email verify) → upload gallery → Argus auto-vision (background) → vision-aware bundles → share offer link → client Stripe checkout → order + lab poll.
 
 ## Quickstart — homelab
 
@@ -70,6 +70,8 @@ journalctl --user -u plutus-saas -f
 | `POST /storefront/share-links` | Bearer | Client offer URL |
 | `POST /store/{slug}/offer/{token}/checkout` | — | Stripe client checkout |
 | `POST /webhooks/stripe` | Stripe sig | Payment → order |
+| `POST /webhooks/mise/gallery-published` | Hook token | Mise publish → recommend |
+| `POST /ui/saas/resend-verification` | — | Resend signup verify email |
 | `GET /healthz` | — | DB, Argus, Stripe, storage, lab checks |
 
 Tenant auth: `Authorization: Bearer plutus_tk_<tenant>_<token>`
@@ -97,6 +99,8 @@ See `.env.homelab.example` (homelab) and `.env.saas.example` (cloud). Common var
 | `PLUTUS_UPLOAD_ASYNC_ANALYZE` | `true` | Background upload worker |
 | `STRIPE_SECRET_KEY` | — | Tenant billing + client checkout |
 | `STRIPE_WEBHOOK_SECRET` | — | Signed webhook verification |
+| `PLUTUS_SIGNUP_VERIFY_EMAIL` | `false` | Require email confirm when SMTP set |
+| `PLUTUS_MISE_HOOK_TOKEN` | — | Mise publish webhook (not admin token) |
 
 ## Tests
 

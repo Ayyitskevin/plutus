@@ -61,10 +61,13 @@ def resolve_offer(store_slug: str, token: str) -> dict[str, Any]:
         raise StorefrontError("offer link not found")
     if link.get("expires_at"):
         try:
-            if datetime.fromisoformat(link["expires_at"]) < datetime.now(UTC):
+            exp_dt = datetime.fromisoformat(str(link["expires_at"]).replace("Z", "+00:00"))
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=UTC)
+            if datetime.now(UTC) > exp_dt:
                 raise StorefrontError("offer link expired")
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise StorefrontError("offer link expired") from exc
     run = db.get_run(int(link["run_id"]), tenant_id=tenant["id"])
     if not run:
         raise StorefrontError("offer no longer available")

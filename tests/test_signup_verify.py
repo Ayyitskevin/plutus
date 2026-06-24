@@ -1,6 +1,8 @@
 """Signup email verification flow."""
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -31,27 +33,24 @@ def saas_client(tmp_path, monkeypatch):
 
 def test_signup_requires_verification_before_api_key_works(saas_client):
     with patch("app.notifications._send_email", return_value=True):
-        r = saas_client.post(
-            "/ui/saas/signup",
-            data={
-                "studio_name": "Verify Studio",
-                "email": "owner@verify.test",
-                "store_slug": "verify-studio",
-            },
+        result = signup.register_studio(
+            studio_name="Verify Studio",
+            email="owner@verify.test",
+            store_slug="verify-studio",
         )
-    assert r.status_code == 200
-    assert b"Check your email" in r.content
-    assert b"plutus_tk_" not in r.content
-
-    row = db.get_pending_signup_verification_by_email("owner@verify.test")
-    assert row is not None
-    api_key = row["api_key"]
+    assert result["verification_required"] is True
+    api_key = result["api_key"]
 
     denied = saas_client.get(
         "/runs/1/json",
         headers={"Authorization": f"Bearer {api_key}"},
     )
     assert denied.status_code == 401
+
+    row = db.get_pending_signup_verification_by_email("owner@verify.test")
+    assert row is not None
+    assert row.get("key_id")
+    assert not row.get("api_key")
 
     verify = saas_client.get(f"/ui/saas/verify-email?token={row['token']}")
     assert verify.status_code == 200
@@ -61,10 +60,13 @@ def test_signup_requires_verification_before_api_key_works(saas_client):
     assert tenant and tenant.get("email_verified_at")
     from app import tenants
 
-    assert tenants.resolve_api_key(api_key) is not None
+    match = re.search(r"plutus_tk_verify-studio_[a-f0-9]+", verify.content.decode())
+    assert match
+    assert tenants.resolve_api_key(match.group(0)) is not None
+    assert tenants.resolve_api_key(api_key) is None
 
 
-def test_verify_token_marks_tenant_verified(tmp_path, monkeypatch):
+def test_verify_token_marks_tenant_verified_and_reissues_key(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "SAAS_MODE", True)
@@ -83,7 +85,8 @@ def test_verify_token_marks_tenant_verified(tmp_path, monkeypatch):
     pending = db.get_pending_signup_verification_by_email("tok@verify.test")
     assert pending
     verified = signup_verify.verify_token(pending["token"])
-    assert verified["api_key"] == pending["api_key"]
+    assert verified["api_key"] != result["api_key"]
+    assert verified["api_key"].startswith("plutus_tk_tok-verify_")
     tenant = db.get_tenant("tok-verify")
     assert tenant and tenant.get("email_verified_at")
 
@@ -105,3 +108,92 @@ def test_signup_skips_verify_without_smtp(tmp_path, monkeypatch):
     assert result["verification_required"] is False
     tenant = db.get_tenant("no-smtp")
     assert tenant and tenant.get("email_verified_at")
+
+
+def test_resend_verification_sends_email(saas_client):
+    with patch("app.notifications._send_email", return_value=True) as send:
+        signup.register_studio(
+            studio_name="Resend Studio",
+            email="resend@verify.test",
+            store_slug="resend-studio",
+        )
+        send.reset_mock()
+        r = saas_client.post(
+            "/ui/saas/resend-verification",
+            data={"email": "resend@verify.test", "return_to": "pending"},
+            follow_redirects=False,
+        )
+    assert r.status_code == 303
+    assert "resent=1" in r.headers["location"]
+    send.assert_called_once()
+
+    r = saas_client.post(
+        "/ui/saas/resend-verification",
+        data={"email": "nobody@verify.test"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "resent=0" in r.headers["location"]
+
+
+def test_verify_token_rejects_expired_and_malformed_expiry(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
+    monkeypatch.setattr(config, "SAAS_MODE", True)
+    monkeypatch.setattr(config, "SIGNUP_VERIFY_EMAIL", True)
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.test")
+    db.migrate()
+    from app import tenants
+
+    tenants.create_tenant("exp-test", name="Exp", store_slug="exp-test")
+    issued = tenants.issue_api_key("exp-test", label="signup")
+    expired = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    db.insert_signup_verification(
+        token="expired-token",
+        tenant_id="exp-test",
+        email="exp@test.com",
+        key_id=issued["key_id"],
+        expires_at=expired,
+    )
+    with pytest.raises(signup_verify.SignupVerifyError, match="expired"):
+        signup_verify.verify_token("expired-token")
+
+    db.insert_signup_verification(
+        token="bad-expiry",
+        tenant_id="exp-test",
+        email="bad@test.com",
+        key_id=issued["key_id"],
+        expires_at="not-a-timestamp",
+    )
+    with pytest.raises(signup_verify.SignupVerifyError, match="invalid"):
+        signup_verify.verify_token("bad-expiry")
+
+
+def test_admin_create_tenant_works_with_email_verify_on(saas_client):
+    from app import tenants
+
+    r = saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    r = saas_client.post(
+        "/ui/saas/app/admin/tenants",
+        data={
+            "tenant_id": "admin-verified",
+            "name": "Admin Verified Studio",
+            "store_slug": "admin-verified",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert b"plutus_tk_admin-verified_" in r.content
+
+    tenant = db.get_tenant("admin-verified")
+    assert tenant and tenant.get("email_verified_at")
+
+    match = re.search(r"plutus_tk_admin-verified_[a-f0-9]+", r.content.decode())
+    assert match
+    assert tenants.resolve_api_key(match.group(0)) is not None

@@ -6,6 +6,7 @@ import logging
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -762,6 +763,7 @@ def ui_saas_signup_post(
             _ui_context(
                 title="Confirm your email",
                 verify_email=result.get("verify_email"),
+                verify_token_hours=config.SIGNUP_VERIFY_TOKEN_HOURS,
                 tenant_name=result["tenant"]["name"],
             ),
             status_code=200,
@@ -857,13 +859,44 @@ def ui_saas_verify_email(request: Request, token: str | None = Query(None)):
     return response
 
 
+@app.get("/ui/saas/signup/pending", response_class=HTMLResponse)
+def ui_saas_signup_pending(request: Request, email: str | None = None):
+    if not signup.signup_enabled():
+        return RedirectResponse("/ui/saas/login", status_code=302)
+    addr = (email or request.query_params.get("email") or "").strip()
+    if not addr:
+        return RedirectResponse("/ui/saas/signup", status_code=302)
+    return templates.TemplateResponse(
+        request,
+        "saas_signup_pending.html",
+        _ui_context(
+            title="Confirm your email",
+            verify_email=addr,
+            verify_token_hours=config.SIGNUP_VERIFY_TOKEN_HOURS,
+            resent=request.query_params.get("resent"),
+        ),
+    )
+
+
 @app.post("/ui/saas/resend-verification")
-def ui_saas_resend_verification(email: str = Form(...)):
+def ui_saas_resend_verification(
+    email: str = Form(...),
+    return_to: str | None = Form(None),
+):
     from . import signup_verify
 
-    if signup_verify.resend_for_email(email):
-        return RedirectResponse("/ui/saas/login?resent=1", status_code=303)
-    return RedirectResponse("/ui/saas/login?resent=0", status_code=303)
+    addr = email.strip()
+    ok = signup_verify.resend_for_email(addr)
+    resent = "1" if ok else "0"
+    if return_to == "pending":
+        return RedirectResponse(
+            f"/ui/saas/signup/pending?email={quote_plus(addr)}&resent={resent}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/ui/saas/login?resent={resent}&email={quote_plus(addr)}",
+        status_code=303,
+    )
 
 
 @app.post("/ui/logout")
@@ -1004,6 +1037,7 @@ def ui_saas_admin_create_tenant(
         )
     except TenantError as exc:
         return RedirectResponse(f"/ui/saas/app/admin?error={quote_plus(str(exc))}", status_code=303)
+    db.update_tenant(tenant["id"], email_verified_at=datetime.now(UTC).isoformat())
     audit.record("admin.tenant.create", request=request, ctx=ctx, tenant_id=tenant["id"])
     issued = tenants.issue_api_key(tenant["id"], label="bootstrap")
     return templates.TemplateResponse(
@@ -1092,12 +1126,30 @@ def ui_saas_admin_patch_tenant(
     if name and name.strip():
         fields["name"] = name.strip()
     if store_slug and store_slug.strip():
-        fields["store_slug"] = store_slug.strip().lower()
+        slug = store_slug.strip().lower()
+        existing = db.get_tenant_by_slug(slug)
+        if existing and existing["id"] != tenant_id:
+            return RedirectResponse(
+                f"/ui/saas/app/admin/tenants/{tenant_id}?"
+                f"error={quote_plus(f'store slug already taken: {slug}')}",
+                status_code=303,
+            )
+        fields["store_slug"] = slug
     if notify_email is not None:
         fields["notify_email"] = notify_email.strip() or None
     if monthly_recommend_cap is not None:
         stripped = monthly_recommend_cap.strip()
-        fields["monthly_recommend_cap"] = int(stripped) if stripped else None
+        if stripped:
+            try:
+                fields["monthly_recommend_cap"] = int(stripped)
+            except ValueError:
+                return RedirectResponse(
+                    f"/ui/saas/app/admin/tenants/{tenant_id}?"
+                    "error=monthly+recommend+cap+must+be+a+number",
+                    status_code=303,
+                )
+        else:
+            fields["monthly_recommend_cap"] = None
     db.update_tenant(tenant_id, **fields)
     audit.record("admin.tenant.patch", request=request, ctx=ctx, tenant_id=tenant_id, detail=fields)
     return RedirectResponse(f"/ui/saas/app/admin/tenants/{tenant_id}?updated=1", status_code=303)

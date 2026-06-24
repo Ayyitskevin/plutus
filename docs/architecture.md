@@ -82,9 +82,11 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 
 ## Tier 9 (GitHub)
 
-- Signup email verification (`PLUTUS_SIGNUP_VERIFY_EMAIL` + SMTP)
+- Signup email verification (`PLUTUS_SIGNUP_VERIFY_EMAIL` + SMTP); pending keys stored as `key_id` (hashed), re-issued on verify
+- Resend verification (`POST /ui/saas/resend-verification`, rate-limited; UI on pending + login pages)
+- Admin-created tenants auto-marked `email_verified_at` so API keys work when verify is on
 - Tenant notify-email on dashboard (`POST /ui/saas/app/settings`)
-- Mise publish hook (`POST /webhooks/mise/gallery-published`, `PLUTUS_MISE_HOOK_TENANT_ID`)
+- Mise publish hook (`POST /webhooks/mise/gallery-published`, `PLUTUS_MISE_HOOK_TOKEN` — separate from admin token)
 - Cloudflare tunnel templates (`ops/cloudflare-tunnel.example.yml`, `wire-cloudflare-tunnel.sh`)
 
 ## Not built yet

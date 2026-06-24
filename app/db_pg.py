@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS signup_verifications (
     token TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL REFERENCES tenants(id),
     email TEXT NOT NULL,
-    api_key TEXT NOT NULL,
+    key_id TEXT,
+    api_key TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL,
     verified_at TIMESTAMPTZ
@@ -264,6 +265,12 @@ def migrate() -> None:
         con.executescript(_SCHEMA)
         con.execute(
             "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ"
+        )
+        con.execute(
+            "ALTER TABLE signup_verifications ADD COLUMN IF NOT EXISTS key_id TEXT"
+        )
+        con.execute(
+            "ALTER TABLE signup_verifications ALTER COLUMN api_key DROP NOT NULL"
         )
         con.execute(
             "UPDATE tenants SET email_verified_at=created_at "

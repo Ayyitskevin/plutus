@@ -81,3 +81,12 @@ def test_mise_webhook_rejects_bad_token(saas_client):
         headers={"Authorization": "Bearer wrong"},
     )
     assert r.status_code == 401
+
+
+def test_mise_webhook_rejects_admin_token(saas_client):
+    r = saas_client.post(
+        "/webhooks/mise/gallery-published",
+        data={"mise_gallery_id": 1},
+        headers={"Authorization": "Bearer hook-admin"},
+    )
+    assert r.status_code == 401
