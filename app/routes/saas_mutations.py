@@ -19,6 +19,7 @@ from .. import (
     ui_sessions,
     uploads,
 )
+from ..async_io import run_sync
 from ..auth_context import AuthContext
 from ..metering import MeteringError
 from ..sell import SellError
@@ -282,7 +283,8 @@ async def ui_saas_sell_post(
 
     try:
         if action in {"publish_run", "publish_batch"}:
-            result = sell.publish_and_sell(
+            result = await run_sync(
+                sell.publish_and_sell,
                 ctx.tenant_id,
                 run_id=run_id,
                 batch_id=batch_id,
@@ -293,7 +295,11 @@ async def ui_saas_sell_post(
         if action == "upload_publish":
             if not gallery_name or not files:
                 return _sell_error_redirect("gallery name and photos are required")
-            batch = uploads.create_batch(tenant_id=ctx.tenant_id, name=gallery_name)
+            batch = await run_sync(
+                uploads.create_batch,
+                tenant_id=ctx.tenant_id,
+                name=gallery_name,
+            )
             new_batch_id = batch["id"]
             try:
                 await uploads.add_upload_files(
@@ -311,7 +317,8 @@ async def ui_saas_sell_post(
                 detail={"photos": batch.get("photo_count")},
             )
             try:
-                analyze_result = service.analyze_upload_batch(
+                analyze_result = await run_sync(
+                    service.analyze_upload_batch,
                     new_batch_id,
                     tenant_id=ctx.tenant_id,
                     name=gallery_name,
@@ -325,7 +332,8 @@ async def ui_saas_sell_post(
                     status_code=303,
                 )
             metrics.inc_tenant(ctx.tenant_id, "recommend_upload")
-            result = sell.publish_and_sell(
+            result = await run_sync(
+                sell.publish_and_sell,
                 ctx.tenant_id,
                 run_id=int(analyze_result["run_id"]),
                 label=offer_label,
@@ -355,7 +363,11 @@ async def ui_saas_upload_post(
     ctx = tenant_ui_redirect(request)
     if not isinstance(ctx, AuthContext):
         return ctx
-    batch = uploads.create_batch(tenant_id=ctx.tenant_id, name=gallery_name)
+    batch = await run_sync(
+        uploads.create_batch,
+        tenant_id=ctx.tenant_id,
+        name=gallery_name,
+    )
     batch_id = batch["id"]
     try:
         await uploads.add_upload_files(
@@ -386,7 +398,8 @@ async def ui_saas_upload_post(
     )
     if analyze:
         try:
-            result = service.analyze_upload_batch(
+            result = await run_sync(
+                service.analyze_upload_batch,
                 batch_id,
                 tenant_id=ctx.tenant_id,
                 name=gallery_name,
@@ -483,12 +496,7 @@ def ui_saas_mise_recommend(
 
 
 
-@router.post("/ui/saas/app/catalog")
-async def ui_saas_tenant_catalog_save(request: Request):
-    ctx = tenant_ui_redirect(request)
-    if not isinstance(ctx, AuthContext):
-        return ctx
-    form = await request.form()
+def _apply_catalog_form(tenant_id: str, form) -> str | None:
     for product in catalog.PRODUCTS:
         sku = product.sku
         cents_raw = form.get(f"cents_{sku}")
@@ -497,26 +505,37 @@ async def ui_saas_tenant_catalog_save(request: Request):
         has_cents = bool(cents_raw and str(cents_raw).strip())
         has_label = bool(label_raw and str(label_raw).strip())
         if not has_cents and not has_label and active:
-            db.delete_product_override(ctx.tenant_id, sku)
+            db.delete_product_override(tenant_id, sku)
             continue
         if has_cents:
             try:
                 unit_cents = int(str(cents_raw).strip())
             except ValueError:
-                return RedirectResponse(
-                    "/ui/saas/app/catalog?"
-                    f"error={quote_plus(f'invalid price for {sku}')}",
-                    status_code=303,
-                )
+                return f"invalid price for {sku}"
         else:
             unit_cents = product.unit_cents
         label = str(label_raw).strip() if has_label else None
         db.upsert_product_override(
-            ctx.tenant_id,
+            tenant_id,
             sku,
             unit_cents=unit_cents,
             label=label,
             active=active,
+        )
+    return None
+
+
+@router.post("/ui/saas/app/catalog")
+async def ui_saas_tenant_catalog_save(request: Request):
+    ctx = tenant_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    form = await request.form()
+    err = await run_sync(_apply_catalog_form, ctx.tenant_id, form)
+    if err:
+        return RedirectResponse(
+            f"/ui/saas/app/catalog?error={quote_plus(err)}",
+            status_code=303,
         )
     audit.record("tenant.catalog.save", request=request, ctx=ctx)
     return RedirectResponse("/ui/saas/app/catalog?saved=1", status_code=303)

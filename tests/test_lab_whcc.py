@@ -5,8 +5,24 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import httpx
+import pytest
+from fastapi.testclient import TestClient
 
 from app import config, db, lab, lab_whcc, tenants
+
+
+@pytest.fixture()
+def saas_client(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
+    monkeypatch.setattr(config, "SAAS_MODE", True)
+    monkeypatch.setattr(config, "API_TOKEN", "admin-secret")
+    monkeypatch.setattr(config, "TENANT_KEY_PEPPER", "pepper-secret")
+    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
+    db.migrate()
+    from app.main import app
+
+    return TestClient(app)
 
 
 def _paid_order(*, tenant_id: str = "whcc-api") -> int:
@@ -88,6 +104,38 @@ def test_verify_webhook_token(monkeypatch):
     monkeypatch.setattr(config, "WHCC_WEBHOOK_SECRET", "whcc-secret")
     assert lab_whcc.verify_webhook_token("Bearer whcc-secret") is True
     assert lab_whcc.verify_webhook_token("wrong") is False
+
+
+def test_verify_webhook_hmac_signature(monkeypatch):
+    monkeypatch.setattr(config, "WHCC_WEBHOOK_SECRET", "whcc-secret")
+    body = b'{"order_id":"whcc-1","status":"shipped"}'
+    sig = lab_whcc.whcc_webhook_signature(body, secret="whcc-secret")
+    assert lab_whcc.verify_webhook_signature(body, f"sha256={sig}") is True
+    assert lab_whcc.verify_webhook_signature(body, sig) is True
+    assert lab_whcc.verify_webhook_signature(body, "deadbeef" * 8) is False
+
+
+def test_whcc_webhook_hmac_via_http(saas_client, tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
+    monkeypatch.setattr(config, "WHCC_WEBHOOK_SECRET", "whcc-secret")
+    db.migrate()
+
+    oid = _paid_order(tenant_id="hmac")
+    ref = "whcc-hmac-ref"
+    db.update_order(oid, lab_status="processing", lab_ref=ref)
+
+    body = b'{"order_id":"whcc-hmac-ref","status":"shipped"}'
+    sig = lab_whcc.whcc_webhook_signature(body, secret="whcc-secret")
+    r = saas_client.post(
+        "/webhooks/whcc",
+        headers={"X-WHCC-Signature": f"sha256={sig}"},
+        content=body,
+    )
+    assert r.status_code == 200
+    order = db.get_order(oid)
+    assert order is not None
+    assert order["lab_status"] == "shipped"
 
 
 def test_whcc_status_unreachable(monkeypatch):

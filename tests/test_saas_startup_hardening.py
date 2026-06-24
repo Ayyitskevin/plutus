@@ -76,8 +76,9 @@ def test_mise_webhook_ignores_spoofed_tenant_id(tmp_path, monkeypatch):
         "argus_last_run_id": 42,
     }
 
-    from app.main import app
     from fastapi.testclient import TestClient
+
+    from app.main import app
 
     client = TestClient(app)
     with patch("app.mise_client.get_gallery", return_value=row):

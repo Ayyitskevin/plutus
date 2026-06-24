@@ -81,13 +81,14 @@ async def stripe_webhook(request: Request):
 async def whcc_webhook(request: Request):
     if not config.WHCC_WEBHOOK_SECRET:
         return error("whcc webhooks not configured", 400)
-    token = request.headers.get("x-whcc-signature") or request.headers.get("authorization", "")
+    raw = await request.body()
+    sig = request.headers.get("x-whcc-signature") or request.headers.get("authorization", "")
     from .. import lab_whcc
 
-    if not lab_whcc.verify_webhook_token(token):
+    if not lab_whcc.verify_webhook_signature(raw, sig):
         return error("invalid whcc webhook auth", 401)
     try:
-        payload = await request.json()
+        payload = json.loads(raw.decode("utf-8"))
     except json.JSONDecodeError:
         return error("invalid json", 400)
 

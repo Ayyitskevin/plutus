@@ -1,6 +1,8 @@
 """WHCC lab adapter — real API when configured, deterministic stub otherwise."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import time
 import uuid
@@ -32,7 +34,36 @@ def whcc_configured() -> bool:
     return bool(config.WHCC_API_URL and config.WHCC_API_KEY)
 
 
+def whcc_webhook_signature(payload: bytes, *, secret: str | None = None) -> str:
+    key = (secret or config.WHCC_WEBHOOK_SECRET or "").encode("utf-8")
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+
+def verify_webhook_signature(payload: bytes, sig_header: str | None) -> bool:
+    secret = config.WHCC_WEBHOOK_SECRET
+    if not secret or not sig_header:
+        return False
+    normalized = sig_header.strip()
+    if normalized in {secret, f"Bearer {secret}"}:
+        return True
+    digest = normalized
+    lower = normalized.lower()
+    if lower.startswith("sha256="):
+        digest = normalized.split("=", 1)[1].strip()
+    elif "v1=" in normalized:
+        parts: dict[str, str] = {}
+        for item in normalized.split(","):
+            key, _, value = item.partition("=")
+            parts[key.strip()] = value.strip()
+        digest = parts.get("v1", "")
+    if len(digest) != 64:
+        return False
+    expected = whcc_webhook_signature(payload, secret=secret)
+    return hmac.compare_digest(expected, digest.lower())
+
+
 def verify_webhook_token(token: str) -> bool:
+    """Legacy static-token check (no body). Prefer verify_webhook_signature."""
     secret = config.WHCC_WEBHOOK_SECRET
     if not secret:
         return False

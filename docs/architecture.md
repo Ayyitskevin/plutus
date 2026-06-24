@@ -114,6 +114,14 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Dogfood scripts use `scripts/dogfood-session.sh` (`plutus_sid` + CSRF, not raw API key cookies)
 - Postgres CI job (`.github/workflows/test.yml` → `scripts/ci-postgres.sh`)
 - Legacy `plutus_ui_token` cookie auth removed — UI uses `plutus_sid` sessions only
+- SaaS startup requires `PLUTUS_REDIS_URL` when rate limiting enabled (multi-worker safe)
+- Mise publish webhook ignores form `tenant_id` in SaaS — scoped to `PLUTUS_MISE_HOOK_TENANT_ID`
+
+## Tier 12 (GitHub)
+
+- WHCC webhook HMAC-SHA256 (`X-WHCC-Signature: sha256=<hex>`; legacy Bearer still works for stub)
+- Async UI mutations offload blocking DB/Argus/sell work via `asyncio.to_thread` (`app/async_io.py`)
+- Postgres CI job in `.github/workflows/test.yml` (`test-postgres` → `scripts/ci-postgres.sh`)
 
 ## Not built yet
 
