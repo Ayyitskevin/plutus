@@ -34,12 +34,9 @@ env_path.write_text("\\n".join(out).rstrip() + "\\n")
 print("wrote Mise hook settings to", env_path)
 PY
 
-if [[ -f "$HOME/ai-workspace/mise-flow-sync/scripts/deploy-flow.sh" ]]; then
-  echo "==> Hint: on flow, set in $FLOW_ENV:"
-  echo "    MISE_PLUTUS_URL=${PLUTUS_URL}"
-  echo "    MISE_PLUTUS_TOKEN=${TOKEN}"
-  echo "    MISE_PLUTUS_TENANT_ID=${TENANT_ID}"
-  echo "    MISE_PLUTUS_USE_WEBHOOK=true   # optional — uses /webhooks/mise/gallery-published"
+if [[ -f "$ROOT/scripts/sync-flow-mise-plutus.sh" ]]; then
+  echo "==> Sync flow Mise env (optional: MISE_FLOW_HOST=... to override)"
+  bash "$ROOT/scripts/sync-flow-mise-plutus.sh" || echo "  (flow sync skipped — run scripts/sync-flow-mise-plutus.sh manually)"
 fi
 
 if systemctl --user is-active plutus-saas >/dev/null 2>&1; then

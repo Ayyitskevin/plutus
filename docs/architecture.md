@@ -141,7 +141,13 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Remaining API routes async (`/analyze-folder`, `/recommend/mise-gallery`)
 - CI installs `.[dev,saas]`; Postgres workflow job on GitHub Actions
 
+## Tier 15 (fleet)
+
+- `scripts/sync-flow-mise-plutus.sh` — push `MISE_PLUTUS_*` from plutus `.env` → flow `/opt/mise/.env`
+- `wire-mise-hook-saas.sh` auto-runs sync after arming hook token
+- Flow publish → `POST /webhooks/mise/gallery-published` on `:8031` (`MISE_PLUTUS_USE_WEBHOOK=true`)
+
 ## Not built yet
 
 - WHCC live API credentials on production fleet (HMAC + stub path ready)
-- Flow `MISE_PLUTUS_*` env on remote flow host (see `wire-mise-hook-saas.sh` hints)
+- Cloudflare tunnel `--bootstrap` for public SaaS URL (template + systemd unit ready)
