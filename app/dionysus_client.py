@@ -62,8 +62,10 @@ def enhance_pitch(
                     {
                         "label": item.get("label"),
                         "size": item.get("size"),
-                        "photo": (item.get("photo") or {}).get("filename"),
-                        "keywords": (item.get("photo") or {}).get("keywords"),
+                        "photo": {
+                            "filename": (item.get("photo") or {}).get("filename"),
+                            "keywords": (item.get("photo") or {}).get("keywords"),
+                        },
                     }
                     for item in (bundle.get("items") or [])
                 ],

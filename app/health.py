@@ -148,6 +148,7 @@ def build_health_report(*, worker: Any | None = None) -> dict:
     elif homelab.store_enabled():
         checks["billing"] = _check_store_billing()
         checks["lab"] = _check_lab()
+        checks["dionysus"] = _check_dionysus()
 
     if checks["database"]["status"] == "error":
         overall = "error"
