@@ -1,10 +1,9 @@
 """Orchestration — ingest, recommend, persist."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
-
-import logging
 
 from . import config, db, ingest, mise_client, recommend
 

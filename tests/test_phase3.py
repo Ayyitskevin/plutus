@@ -40,6 +40,7 @@ def test_tenant_catalog_pricing(tmp_path, monkeypatch):
 def test_lab_submit_on_payment(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
+    monkeypatch.setattr(config, "LAB_ADAPTER", "mock")
     db.migrate()
 
     from app import tenants
