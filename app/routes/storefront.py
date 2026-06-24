@@ -17,7 +17,6 @@ from .. import (
 )
 from ..auth import require_bearer
 from ..auth_context import AuthContext
-from ..orders import OrderError, create_bundle_checkout, simulate_test_payment
 from ..gallery_media import (
     FULL_MAX_EDGE,
     THUMB_MAX_EDGE,
@@ -25,6 +24,7 @@ from ..gallery_media import (
     render_jpeg,
     resolve_photo_file,
 )
+from ..orders import OrderError, create_bundle_checkout, simulate_test_payment
 from ..storefront import StorefrontError, create_share_link, resolve_offer
 from .deps import (
     templates,

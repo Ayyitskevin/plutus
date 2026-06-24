@@ -83,7 +83,8 @@ def resolve_photo_file(
         if path_hint.startswith("s3://"):
             without = path_hint.removeprefix("s3://")
             _bucket, _, key = without.partition("/")
-            cache = config.DATA_DIR / "offer_cache" / hashlib.sha256(path_hint.encode()).hexdigest()[:16]
+            digest = hashlib.sha256(path_hint.encode()).hexdigest()[:16]
+            cache = config.DATA_DIR / "offer_cache" / digest
             cache.mkdir(parents=True, exist_ok=True)
             candidates.append(storage._materialize_s3_uri(path_hint, cache))
         else:
@@ -180,9 +181,10 @@ def enrich_bundles_for_offer(
                     offer_photo_path(store_slug, token, str(slot), size="thumb")
                 )
         enriched["photo_slot_urls"] = slot_urls
-        hero = items_out[0]["photo"]["thumb_url"] if items_out and items_out[0].get("photo", {}).get("thumb_url") else (
-            slot_urls[0] if slot_urls else None
+        first_thumb = (
+            items_out[0].get("photo", {}).get("thumb_url") if items_out else None
         )
+        hero = first_thumb or (slot_urls[0] if slot_urls else None)
         enriched["hero_thumb_url"] = hero
         out.append(enriched)
     return out

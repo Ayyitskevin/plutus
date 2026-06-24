@@ -49,3 +49,5 @@ def _sqlite_test_backend(monkeypatch, request):
         return
     monkeypatch.setattr(config, "DATABASE_URL", None)
     monkeypatch.setattr(config, "DB_BACKEND", "sqlite")
+    # HTTP testserver cannot send Secure cookies set when SAAS_PUBLIC_URL is https
+    monkeypatch.setattr(config, "SAAS_PUBLIC_URL", "http://testserver")
