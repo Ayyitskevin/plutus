@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/dogfood-session.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-wait-batch.sh"
 
 HOST="${PLUTUS_HOST:-127.0.0.1}"
 PORT="${PLUTUS_PORT:-8031}"
@@ -49,24 +51,8 @@ if [[ -z "$RUN_ID" || "$RUN_ID" == "$UPLOAD" ]]; then
   if [[ "$UPLOAD" == *"analyzing="* ]]; then
     BATCH_ID="${UPLOAD#*analyzing=}"
     BATCH_ID="${BATCH_ID%%&*}"
-    echo "==> Async analyze queued — polling batch $BATCH_ID"
-    DEADLINE=$((SECONDS + 600))
-    while (( SECONDS < DEADLINE )); do
-      STATUS_JSON=$(curl -sf "$BASE/upload-batches/${BATCH_ID}/status" \
-        -H "Authorization: Bearer $API_KEY")
-      RUN_ID=$(echo "$STATUS_JSON" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if d.get('failed'):
-    raise SystemExit(d.get('analyze_error') or 'analyze failed')
-if d.get('done') and d.get('run_id'):
-    print(d['run_id'])
-")
-      if [[ -n "$RUN_ID" ]]; then
-        break
-      fi
-      sleep 3
-    done
+    dogfood_wait_batch "$BASE" "$API_KEY" "$BATCH_ID"
+    RUN_ID="$DOGFOOD_RUN_ID"
   fi
 fi
 if [[ -z "$RUN_ID" || "$RUN_ID" == "$UPLOAD" ]]; then

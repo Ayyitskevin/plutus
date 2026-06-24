@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/dogfood-session.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-wait-batch.sh"
 
 ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env}"
 if [[ -f "$ENV_FILE" ]]; then
@@ -49,10 +51,8 @@ rows = db.list_upload_batches(tenant_id="${SLUG}", limit=1)
 print(rows[0]["id"] if rows else "")
 PY
 )
-RUN_JSON=$(curl -sf -X POST "$BASE/recommend/upload-batch" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -d "batch_id=${BATCH_ID}&sync=1")
-RUN_ID=$(echo "$RUN_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['run_id'])")
+dogfood_wait_batch "$BASE" "$API_KEY" "$BATCH_ID"
+RUN_ID="$DOGFOOD_RUN_ID"
 
 LINK_JSON=$(curl -sf -X POST "$BASE/storefront/share-links" \
   -H "Authorization: Bearer ${API_KEY}" \

@@ -5,7 +5,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from . import config
@@ -814,6 +814,13 @@ def list_audit_events(
                 pass
         out.append(item)
     return out
+
+
+def purge_audit_events(*, older_than_days: int) -> int:
+    cutoff = (datetime.now(UTC) - timedelta(days=older_than_days)).isoformat()
+    with connection() as con:
+        cur = con.execute("DELETE FROM audit_log WHERE created_at < ?", (cutoff,))
+        return cur.rowcount
 
 
 # --- Stripe webhook dedup ---

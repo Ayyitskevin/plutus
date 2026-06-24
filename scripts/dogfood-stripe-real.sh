@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/dogfood-session.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-wait-batch.sh"
 source .venv/bin/activate 2>/dev/null || true
 
 HOST="${PLUTUS_HOST:-127.0.0.1}"
@@ -69,17 +71,8 @@ print(rows[0]["id"] if rows else "")
 PY
 )
 test -n "$BATCH_ID"
-RUN_JSON=$(curl -sf -X POST "$BASE/recommend/upload-batch" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -d "batch_id=${BATCH_ID}&sync=1")
-RUN_ID=$(echo "$RUN_JSON" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-if d.get('queued'):
-    raise SystemExit('batch still queued — set PLUTUS_UPLOAD_ASYNC_ANALYZE=false or wait')
-print(d['run_id'])
-")
-echo "  run_id=$RUN_ID"
+dogfood_wait_batch "$BASE" "$API_KEY" "$BATCH_ID"
+RUN_ID="$DOGFOOD_RUN_ID"
 
 echo "==> Share link + Stripe checkout session"
 LINK=$(curl -sf -X POST "$BASE/storefront/share-links" \

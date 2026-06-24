@@ -12,13 +12,20 @@ _counters: dict[str, int] = {
     "storefront_views": 0,
     "orders_created": 0,
     "orders_paid": 0,
+    "rate_limit_exceeded": 0,
 }
+_gauges: dict[str, float] = {}
 _tenant_counters: dict[str, dict[str, int]] = {}
 
 
 def inc(name: str, amount: int = 1) -> None:
     with _lock:
         _counters[name] = _counters.get(name, 0) + amount
+
+
+def set_gauge(name: str, value: float) -> None:
+    with _lock:
+        _gauges[name] = value
 
 
 def inc_tenant(tenant_id: str | None, name: str, amount: int = 1) -> None:
@@ -42,13 +49,38 @@ def snapshot(*, tenant_id: str | None = None) -> dict:
         return out
 
 
+def refresh_runtime_gauges() -> None:
+    from . import config, db
+
+    if not config.SAAS_MODE:
+        return
+    queued = db.list_upload_batches_by_status("queued", limit=500)
+    set_gauge("upload_batches_queued", float(len(queued)))
+    set_gauge(
+        "upload_batches_analyzing",
+        float(len(db.list_upload_batches_by_status("analyzing", limit=500))),
+    )
+
+
 def prometheus_text() -> str:
+    refresh_runtime_gauges()
     snap = snapshot()
+    with _lock:
+        gauges = dict(_gauges)
     lines = [
         "# HELP plutus_uptime_seconds Process uptime in seconds.",
         "# TYPE plutus_uptime_seconds gauge",
         f"plutus_uptime_seconds {snap['uptime_seconds']}",
     ]
+    for name, value in sorted(gauges.items()):
+        metric = f"plutus_{name}"
+        lines.extend(
+            [
+                f"# HELP {metric} Plutus gauge {name}.",
+                f"# TYPE {metric} gauge",
+                f"{metric} {value}",
+            ]
+        )
     for name, value in sorted(snap["counters"].items()):
         metric = f"plutus_{name}_total"
         lines.extend(

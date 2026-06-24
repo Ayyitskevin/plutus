@@ -14,6 +14,7 @@ from .. import (
     service,
     uploads,
 )
+from ..async_io import run_sync
 from ..auth import require_bearer
 from ..auth_context import AuthContext
 from ..metering import MeteringError
@@ -68,7 +69,8 @@ async def recommend_upload_batch_api(
         raise HTTPException(status_code=403, detail="tenant API key required")
     async_mode = False if sync else None
     try:
-        result = service.analyze_upload_batch(
+        result = await run_sync(
+            service.analyze_upload_batch,
             batch_id,
             tenant_id=ctx.tenant_id,
             name=name,

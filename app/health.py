@@ -132,12 +132,19 @@ def _check_notifications() -> dict[str, str | bool]:
     }
 
 
+def _check_redis() -> dict[str, str | bool]:
+    from . import redis_client
+
+    return redis_client.ping_status()
+
+
 def build_health_report(*, worker: Any | None = None) -> dict:
     checks = {
         "database": _check_database(),
         "mise": _check_mise(),
     }
     if config.SAAS_MODE:
+        checks["redis"] = _check_redis()
         checks["storage"] = _check_storage()
         checks["argus"] = _check_argus()
         checks["billing"] = _check_billing()
@@ -151,6 +158,8 @@ def build_health_report(*, worker: Any | None = None) -> dict:
         checks["dionysus"] = _check_dionysus()
 
     if checks["database"]["status"] == "error":
+        overall = "error"
+    elif any(item.get("status") == "error" for item in checks.values()):
         overall = "error"
     elif any(item.get("status") == "degraded" for item in checks.values()):
         overall = "degraded"

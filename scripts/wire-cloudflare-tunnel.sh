@@ -42,12 +42,45 @@ mkdir -p "$HOME/.config/systemd/user"
 cp "$ROOT/ops/plutus-cloudflared-user.service" "$HOME/.config/systemd/user/plutus-cloudflared.service"
 systemctl --user daemon-reload
 
-echo ""
-echo "Next steps (one-time, on a machine with cloudflared):"
-echo "  cloudflared tunnel create plutus-saas"
-echo "  cloudflared tunnel route dns plutus-saas ${HOSTNAME}"
-echo "  edit ${CF_CONFIG} with tunnel UUID + credentials path"
-echo "  systemctl --user enable --now plutus-cloudflared"
-echo "  systemctl --user restart plutus-saas"
+TUNNEL_NAME="${PLUTUS_CF_TUNNEL_NAME:-plutus-saas}"
+if [[ "${1:-}" == "--bootstrap" ]] && command -v cloudflared >/dev/null 2>&1; then
+  echo "==> Bootstrap Cloudflare tunnel (${TUNNEL_NAME})"
+  if ! cloudflared tunnel list 2>/dev/null | grep -q "${TUNNEL_NAME}"; then
+    cloudflared tunnel create "${TUNNEL_NAME}"
+  fi
+  cloudflared tunnel route dns "${TUNNEL_NAME}" "${HOSTNAME}" 2>/dev/null || true
+  TUNNEL_ID=$(cloudflared tunnel list 2>/dev/null | awk -v n="${TUNNEL_NAME}" '$0 ~ n {print $1; exit}')
+  if [[ -n "${TUNNEL_ID}" ]]; then
+    python3 - <<PY
+from pathlib import Path
+import re
+
+cfg = Path("${CF_CONFIG}")
+text = cfg.read_text() if cfg.exists() else ""
+text = re.sub(r"^tunnel:.*$", f"tunnel: ${TUNNEL_ID}", text, flags=re.M)
+cred = Path.home() / ".cloudflared" / f"${TUNNEL_ID}.json"
+text = re.sub(
+    r"^credentials-file:.*$",
+    f"credentials-file: {cred}",
+    text,
+    flags=re.M,
+)
+cfg.write_text(text)
+print("updated", cfg, "tunnel=", "${TUNNEL_ID}")
+PY
+    systemctl --user enable --now plutus-cloudflared 2>/dev/null || true
+    systemctl --user restart plutus-saas 2>/dev/null || true
+  fi
+else
+  echo ""
+  echo "Next steps (one-time, on a machine with cloudflared):"
+  echo "  bash scripts/wire-cloudflare-tunnel.sh --bootstrap"
+  echo "  # or manually:"
+  echo "  cloudflared tunnel create ${TUNNEL_NAME}"
+  echo "  cloudflared tunnel route dns ${TUNNEL_NAME} ${HOSTNAME}"
+  echo "  edit ${CF_CONFIG} with tunnel UUID + credentials path"
+  echo "  systemctl --user enable --now plutus-cloudflared"
+  echo "  systemctl --user restart plutus-saas"
+fi
 echo ""
 echo "Public URL will be ${PUBLIC_URL} (local service :${PORT})"

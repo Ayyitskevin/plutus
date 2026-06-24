@@ -12,6 +12,7 @@ from .. import (
     config,
     metrics,
 )
+from ..async_io import run_sync
 from .deps import (
     error,
 )
@@ -20,7 +21,7 @@ log = logging.getLogger("plutus")
 router = APIRouter()
 
 @router.post("/webhooks/mise/gallery-published")
-def mise_gallery_published_webhook(
+async def mise_gallery_published_webhook(
     request: Request,
     mise_gallery_id: int = Form(...),
     tenant_id: str | None = Form(None),
@@ -30,7 +31,8 @@ def mise_gallery_published_webhook(
     from .. import mise_hook
 
     mise_hook.verify_hook_token(request)
-    result = mise_hook.recommend_published_gallery(
+    result = await run_sync(
+        mise_hook.recommend_published_gallery,
         mise_gallery_id=mise_gallery_id,
         tenant_id=tenant_id,
         argus_run_id=argus_run_id,
@@ -62,7 +64,7 @@ async def stripe_webhook(request: Request):
     except json.JSONDecodeError:
         return error("invalid json", 400)
     try:
-        billing.handle_webhook_event(event)
+        await run_sync(billing.handle_webhook_event, event)
     except Exception as exc:
         log.exception("stripe webhook processing failed")
         audit.record(
@@ -92,7 +94,7 @@ async def whcc_webhook(request: Request):
     except json.JSONDecodeError:
         return error("invalid json", 400)
 
-    if not lab_whcc.handle_webhook(payload):
+    if not await run_sync(lab_whcc.handle_webhook, payload):
         return error("unhandled webhook", 404)
     audit.record("lab.whcc.webhook", request=request, detail=payload)
     return {"received": True}

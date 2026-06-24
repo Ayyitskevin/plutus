@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, homelab, lab, rate_limit, saas, upload_worker
+from . import audit_retention, config, db, homelab, lab, rate_limit, saas, upload_worker
 from .routes import register_routes
 
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +54,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             target=_upload_worker_loop, daemon=True, name="upload-worker"
         )
         upload_thread.start()
+
+    def _audit_purge_loop() -> None:
+        while not stop_poll.wait(3600):
+            try:
+                audit_retention.purge_stale_audit_events()
+            except Exception:
+                log.exception("audit purge loop error")
+
+    audit_thread = None
+    if config.SAAS_MODE and config.AUDIT_LOG_ENABLED and config.AUDIT_LOG_RETENTION_DAYS > 0:
+        audit_thread = threading.Thread(target=_audit_purge_loop, daemon=True, name="audit-purge")
+        audit_thread.start()
     try:
         yield
     finally:
@@ -63,6 +75,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             poll_thread.join(timeout=grace)
         if upload_thread:
             upload_thread.join(timeout=grace)
+        if audit_thread:
+            audit_thread.join(timeout=grace)
 
 
 app = FastAPI(

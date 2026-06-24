@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/dogfood-session.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-wait-batch.sh"
 
 ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env}"
 if [[ -f "$ENV_FILE" ]]; then
@@ -64,17 +66,8 @@ print(rows[0]["id"] if rows else "")
 PY
 )
 test -n "$BATCH_ID"
-RUN_JSON=$(curl -sf -X POST "$BASE/recommend/upload-batch" \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -d "batch_id=${BATCH_ID}&sync=1")
-RUN_ID=$(echo "$RUN_JSON" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-if d.get('queued'):
-    raise SystemExit('batch still queued')
-print(d['run_id'])
-")
-echo "  run_id=$RUN_ID"
+dogfood_wait_batch "$BASE" "$API_KEY" "$BATCH_ID"
+RUN_ID="$DOGFOOD_RUN_ID"
 
 echo "==> pitch.txt"
 PITCH=$(curl -sf -H "Authorization: Bearer ${API_KEY}" "${BASE}/runs/${RUN_ID}/pitch.txt")

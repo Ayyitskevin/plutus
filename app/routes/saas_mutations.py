@@ -223,14 +223,14 @@ def ui_saas_admin_revoke_key(request: Request, tenant_id: str, key_id: str):
 
 
 @router.post("/ui/saas/app/admin/tenants/{tenant_id}/billing/checkout")
-def ui_saas_admin_billing_checkout(request: Request, tenant_id: str):
+async def ui_saas_admin_billing_checkout(request: Request, tenant_id: str):
     ctx = admin_ui_redirect(request)
     if not isinstance(ctx, AuthContext):
         return ctx
     if not db.get_tenant(tenant_id):
         return RedirectResponse("/ui/saas/app/admin?error=tenant+not+found", status_code=303)
     try:
-        session = billing.create_checkout_session(tenant_id)
+        session = await run_sync(billing.create_checkout_session, tenant_id)
     except billing.BillingError as exc:
         return templates.TemplateResponse(
             request,
@@ -422,7 +422,7 @@ async def ui_saas_upload_post(
 
 
 @router.post("/ui/saas/app/upload/{batch_id}/analyze")
-def ui_saas_upload_analyze(
+async def ui_saas_upload_analyze(
     request: Request,
     batch_id: str,
     argus_run_id: int | None = Form(None),
@@ -431,7 +431,8 @@ def ui_saas_upload_analyze(
     if not isinstance(ctx, AuthContext):
         return ctx
     try:
-        result = service.analyze_upload_batch(
+        result = await run_sync(
+            service.analyze_upload_batch,
             batch_id,
             tenant_id=ctx.tenant_id,
             argus_run_id=argus_run_id,
@@ -452,7 +453,7 @@ def ui_saas_upload_analyze(
 
 
 @router.post("/ui/saas/app/mise/{gallery_id}/recommend")
-def ui_saas_mise_recommend(
+async def ui_saas_mise_recommend(
     request: Request,
     gallery_id: int,
     argus_run_id: int | None = Form(None),
@@ -461,7 +462,8 @@ def ui_saas_mise_recommend(
     if not isinstance(ctx, AuthContext):
         return ctx
     try:
-        result = service.analyze_mise_gallery(
+        result = await run_sync(
+            service.analyze_mise_gallery,
             gallery_id,
             argus_run_id=argus_run_id,
             tenant_id=ctx.tenant_id,
@@ -603,7 +605,7 @@ def ui_saas_tenant_revoke_key(request: Request, key_id: str):
 
 
 @router.post("/ui/saas/app/share-link")
-def ui_saas_create_share_link(
+async def ui_saas_create_share_link(
     request: Request,
     run_id: int = Form(...),
     label: str | None = Form(None),
@@ -612,7 +614,8 @@ def ui_saas_create_share_link(
     if not isinstance(ctx, AuthContext):
         return ctx
     try:
-        link = create_share_link(
+        link = await run_sync(
+            create_share_link,
             tenant_id=ctx.tenant_id,
             run_id=run_id,
             label=label.strip() if label else None,
@@ -631,12 +634,12 @@ def ui_saas_create_share_link(
 
 
 @router.post("/ui/saas/billing/checkout")
-def ui_saas_billing_checkout(request: Request):
+async def ui_saas_billing_checkout(request: Request):
     ctx = tenant_ui_redirect(request)
     if not isinstance(ctx, AuthContext):
         return ctx
     try:
-        session = billing.create_checkout_session(ctx.tenant_id)
+        session = await run_sync(billing.create_checkout_session, ctx.tenant_id)
     except billing.BillingError as exc:
         from ..metering import usage_snapshot
 
@@ -659,12 +662,12 @@ def ui_saas_billing_checkout(request: Request):
 
 
 @router.post("/ui/saas/billing/portal")
-def ui_saas_billing_portal(request: Request):
+async def ui_saas_billing_portal(request: Request):
     ctx = tenant_ui_redirect(request)
     if not isinstance(ctx, AuthContext):
         return ctx
     try:
-        portal = billing.create_billing_portal_session(ctx.tenant_id)
+        portal = await run_sync(billing.create_billing_portal_session, ctx.tenant_id)
     except billing.BillingError as exc:
         from ..metering import usage_snapshot
 

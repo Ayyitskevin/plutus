@@ -123,6 +123,17 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Async UI mutations offload blocking DB/Argus/sell work via `asyncio.to_thread` (`app/async_io.py`)
 - Postgres CI job in `.github/workflows/test.yml` (`test-postgres` → `scripts/ci-postgres.sh`)
 
+## Tier 13 (GitHub)
+
+- Full async offload: webhooks (Stripe/WHCC/Mise), API upload-batch, billing/share/mise UI routes
+- Shared `app/redis_client.py` — health check, fail-closed SaaS rate limits (503, no memory fallback)
+- `pip install -e '.[saas]'` bundles redis + postgres + boto3
+- Upload worker Redis lock for SQLite multi-worker; Postgres uses `SKIP LOCKED`
+- Audit log retention worker (`app/audit_retention.py`, hourly purge)
+- Prometheus gauges: `upload_batches_queued`, `upload_batches_analyzing`, `rate_limit_exceeded` counter
+- `scripts/dogfood-wait-batch.sh` — shared async-analyze polling for all dogfood scripts
+- `wire-cloudflare-tunnel.sh --bootstrap` — optional tunnel create + DNS route
+
 ## Not built yet
 
-- Automated Cloudflare tunnel provisioning (manual `cloudflared tunnel create` still required)
+- WHCC live API credentials on production fleet (HMAC + stub path ready)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from . import config, db, service
+from . import config, db, redis_client, service
 
 log = logging.getLogger("plutus.upload_worker")
 
@@ -24,9 +24,16 @@ def process_pending_batches(*, limit: int = 1) -> int:
     """Process queued upload batches; returns count completed."""
     requeue_stale_batches()
     processed = 0
+    lock_name = "upload-worker:claim"
     for _ in range(limit):
+        if config.REDIS_URL and db.backend_name() == "sqlite":
+            lock_ttl = max(30, config.UPLOAD_WORKER_INTERVAL * 3)
+            if not redis_client.acquire_lock(lock_name, ttl_seconds=lock_ttl):
+                break
         batch = db.claim_upload_batch_for_processing()
         if not batch:
+            if config.REDIS_URL and db.backend_name() == "sqlite":
+                redis_client.release_lock(lock_name)
             break
         batch_id = batch["id"]
         tenant_id = batch["tenant_id"]
@@ -48,4 +55,7 @@ def process_pending_batches(*, limit: int = 1) -> int:
                 analyze_error=str(exc)[:500],
                 analyze_started_at=None,
             )
+        finally:
+            if config.REDIS_URL and db.backend_name() == "sqlite":
+                redis_client.release_lock(lock_name)
     return processed
