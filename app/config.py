@@ -48,8 +48,11 @@ HOMELAB_STUDIO_NAME = os.environ.get("PLUTUS_HOMELAB_STUDIO_NAME", "Kevin Lee St
 TENANT_KEY_PEPPER = os.environ.get("PLUTUS_TENANT_KEY_PEPPER") or API_TOKEN or "plutus-dev-pepper"
 SAAS_PUBLIC_URL = os.environ.get("PLUTUS_SAAS_PUBLIC_URL", f"http://{HOST}:{PORT}")
 
-# Self-service signup (on when SaaS mode unless explicitly disabled)
-SIGNUP_ENABLED = os.environ.get("PLUTUS_SIGNUP_ENABLED", "true").lower() == "true"
+# Self-service signup — closed by default. When SMTP is unconfigured,
+# verification silently no-ops and new tenants auto-activate UNVERIFIED, so a
+# deployment must opt in explicitly (and should wire SMTP first). Set
+# PLUTUS_SIGNUP_ENABLED=true to open public registration.
+SIGNUP_ENABLED = os.environ.get("PLUTUS_SIGNUP_ENABLED", "false").lower() == "true"
 SIGNUP_TRIAL_DAYS = int(os.environ.get("PLUTUS_SIGNUP_TRIAL_DAYS", "14"))
 SIGNUP_TRIAL_RECOMMEND_CAP = int(os.environ.get("PLUTUS_SIGNUP_TRIAL_RECOMMEND_CAP", "25"))
 SIGNUP_REDIRECT_BILLING = (
