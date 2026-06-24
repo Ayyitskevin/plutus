@@ -62,6 +62,7 @@ def test_verify_token_marks_tenant_verified_and_issues_key(tmp_path, monkeypatch
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "SAAS_MODE", True)
+    monkeypatch.setattr(config, "SIGNUP_ENABLED", True)
     monkeypatch.setattr(config, "SIGNUP_VERIFY_EMAIL", True)
     monkeypatch.setattr(config, "SMTP_HOST", "smtp.test")
     monkeypatch.setattr(config, "SMTP_FROM", "verify@plutus.test")
