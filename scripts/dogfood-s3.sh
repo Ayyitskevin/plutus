@@ -26,16 +26,11 @@ assert storage.get('backend') == 's3', storage
 assert storage.get('configured'), storage
 "
 
-echo "==> Signup S3 trial tenant"
-STUDIO="s3-$(date +%s)"
+PLUTUS_DOGFOOD_ROOT="$ROOT"
+echo "==> Dogfood tenant"
 SLUG="s3-$(date +%s | tail -c 6)"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
-if [[ -z "$API_KEY" ]]; then
-  echo "Signup failed — no API key in response" >&2
-  exit 1
-fi
+dogfood_bootstrap_tenant "$SLUG" "S3 Studio"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 echo "  tenant=$SLUG"
 dogfood_session_login "$BASE" "$API_KEY"
 

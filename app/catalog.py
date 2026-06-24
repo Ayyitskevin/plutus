@@ -37,6 +37,19 @@ def get_product(sku: str) -> Product | None:
     return _BY_SKU.get(sku)
 
 
+def is_album_sku(sku: str) -> bool:
+    product = get_product(sku)
+    return product is not None and product.category == "album"
+
+
+def bundles_include_album(bundles: list) -> bool:
+    for bundle in bundles:
+        for item in bundle.get("items") or []:
+            if is_album_sku(str(item.get("sku") or "")):
+                return True
+    return False
+
+
 def _override_map(tenant_id: str | None) -> dict[str, dict]:
     if not tenant_id:
         return {}

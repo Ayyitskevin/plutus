@@ -28,6 +28,22 @@
 </div>
 {% endif %}
 
+<div class="card">
+  <h3 style="margin-top:0">Invite kit</h3>
+  <p class="small">Share with the photographer (paste into email or Slack).</p>
+  <textarea readonly rows="5" style="width:100%;font-size:.85rem;margin:.5rem 0">{{ invite_kit }}</textarea>
+  {% if tenant.notify_email and smtp_ready %}
+  <form method="post" action="/ui/saas/app/admin/tenants/{{ tenant.id }}/resend-welcome" class="inline-form">
+    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+    <button type="submit" class="secondary">Resend welcome email to {{ tenant.notify_email }}</button>
+  </form>
+  {% elif tenant.notify_email %}
+  <p class="small">SMTP not configured — share the invite kit manually.</p>
+  {% else %}
+  <p class="small">Set a notify email below to enable welcome email resend.</p>
+  {% endif %}
+</div>
+
 <div class="dash-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
   <div class="card">
     <h3 style="margin-top:0">Usage this month</h3>

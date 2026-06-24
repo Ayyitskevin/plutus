@@ -148,6 +148,32 @@ def test_admin_create_tenant_sends_welcome_email(saas_client):
     assert tenant and tenant["notify_email"] == "photo@invite.test"
 
 
+def test_admin_resend_welcome_email(saas_client):
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": "admin-secret"},
+        follow_redirects=False,
+    )
+    saas_client.post(
+        "/ui/saas/app/admin/tenants",
+        data={
+            "tenant_id": "resend",
+            "name": "Resend Studio",
+            "notify_email": "ops@resend.test",
+        },
+        follow_redirects=False,
+    )
+    with patch("app.notifications.send_tenant_welcome_email", return_value=True) as send:
+        r = saas_client.post(
+            "/ui/saas/app/admin/tenants/resend/resend-welcome",
+            follow_redirects=False,
+        )
+    assert r.status_code == 200
+    assert b"Welcome email resent" in r.content
+    send.assert_called_once()
+    assert send.call_args.kwargs["to"] == "ops@resend.test"
+
+
 def test_admin_create_tenant_skips_welcome_without_smtp(saas_client, monkeypatch):
     monkeypatch.setattr(config, "SMTP_HOST", None)
     monkeypatch.setattr(config, "SMTP_FROM", None)

@@ -3,6 +3,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-session.sh"
 
 ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env}"
 if [[ -f "$ENV_FILE" ]]; then
@@ -44,12 +46,11 @@ print(json.dumps(match))
 GID=$(echo "$GALLERY" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
 echo "  gallery_id=$GID"
 
-echo "==> Signup tenant + recommend via API"
-STUDIO="mise-$(date +%s)"
+PLUTUS_DOGFOOD_ROOT="$ROOT"
+echo "==> Dogfood tenant + recommend via API"
 SLUG="m$(date +%s | tail -c 6)"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
+dogfood_bootstrap_tenant "$SLUG" "Mise Studio"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 
 RUN_JSON=$(curl -sf -X POST "$BASE/recommend/mise-gallery" \

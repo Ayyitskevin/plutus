@@ -263,3 +263,23 @@ def ui_saas_resend_verification(
     )
 
 
+@router.get("/privacy", response_class=HTMLResponse)
+def privacy_policy(request: Request):
+    back = "/ui/saas" if config.SAAS_MODE else "/"
+    return templates.TemplateResponse(
+        request,
+        "trust_privacy.html",
+        ui_context(request, title="Privacy", back_url=back),
+    )
+
+
+@router.get("/terms", response_class=HTMLResponse)
+def terms_of_service(request: Request):
+    back = "/ui/saas" if config.SAAS_MODE else "/"
+    return templates.TemplateResponse(
+        request,
+        "trust_terms.html",
+        ui_context(request, title="Terms", back_url=back),
+    )
+
+

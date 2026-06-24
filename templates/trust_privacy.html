@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="card">
+  <p class="small"><a href="{{ back_url }}">&larr; plutus</a></p>
+  <h2 style="margin-top:0">Privacy policy</h2>
+  <p class="small">Last updated June 2026 · Draft for photographer review</p>
+
+  <div class="card" style="background:#fff8e6;border-color:#e8c96a;margin:1rem 0">
+    <p style="margin:0"><strong>Short version:</strong> Client galleries belong to the photographer.
+      We use images only to recommend print bundles and fulfill orders. We do not train models on
+      your clients' photos. Each tenant sees only their own galleries and orders.</p>
+  </div>
+
+  <h3>Who we are</h3>
+  <p class="small">Plutus is a print and album upsell layer for professional photographers.
+    This policy covers photographers using the SaaS dashboard, client offer pages, and checkout.</p>
+
+  <h3>What we collect</h3>
+  <ul class="small">
+    <li><strong>Tenant account</strong> — studio name, notify email, API keys (hashed), billing status.</li>
+    <li><strong>Galleries</strong> — images uploaded or synced from Mise, plus vision metadata from Argus.</li>
+    <li><strong>Client checkout</strong> — name and email when a client pays (for receipts and fulfillment).</li>
+    <li><strong>Orders</strong> — line items, totals, lab status, and audit events for support.</li>
+  </ul>
+
+  <h3>How we use data</h3>
+  <ul class="small">
+    <li>Generate print bundle recommendations and storefront offer links.</li>
+    <li>Process Stripe payments and hand orders to the configured print lab.</li>
+    <li>Send transactional email (order alerts, client confirmations) when SMTP is configured.</li>
+  </ul>
+
+  <h3>What we do not do</h3>
+  <ul class="small">
+    <li>We do <strong>not</strong> train foundation models on your clients' gallery images.</li>
+    <li>We do <strong>not</strong> sell gallery data to third parties.</li>
+    <li>We do <strong>not</strong> expose one tenant's galleries to another tenant.</li>
+  </ul>
+
+  <h3>Retention &amp; deletion</h3>
+  <p class="small">Galleries and orders are retained while your account is active. Contact your
+    studio operator or Plutus admin to request tenant deletion.</p>
+
+  <h3>Questions</h3>
+  <p class="small">Privacy questions: use the notify email on your studio account or contact
+    the operator who invited you to Plutus.</p>
+</div>
+{% endblock %}

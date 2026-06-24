@@ -210,6 +210,70 @@ def ui_saas_admin_create_tenant(
     )
 
 
+@router.post("/ui/saas/app/admin/tenants/{tenant_id}/resend-welcome")
+def ui_saas_admin_resend_welcome(request: Request, tenant_id: str):
+    ctx = admin_ui_redirect(request)
+    if not isinstance(ctx, AuthContext):
+        return ctx
+    from .. import tenants
+
+    tenant = db.get_tenant(tenant_id)
+    if tenant is None:
+        return RedirectResponse("/ui/saas/app/admin?error=tenant+not+found", status_code=303)
+    addr = (tenant.get("notify_email") or "").strip()
+    if not addr:
+        return templates.TemplateResponse(
+            request,
+            "saas_admin_tenant.html",
+            admin_tenant_context(
+                request,
+                tenant_id,
+                admin_error="Set a notify email before resending welcome.",
+            ),
+        )
+    if not notifications.smtp_ready():
+        return templates.TemplateResponse(
+            request,
+            "saas_admin_tenant.html",
+            admin_tenant_context(
+                request,
+                tenant_id,
+                admin_error="SMTP not configured on server.",
+            ),
+        )
+    issued = tenants.issue_api_key(tenant_id, label="welcome-resend")
+    sent = notifications.send_tenant_welcome_email(
+        to=addr,
+        tenant=tenant,
+        api_key=issued["api_key"],
+    )
+    audit.record(
+        "admin.tenant.welcome_resend",
+        request=request,
+        ctx=ctx,
+        tenant_id=tenant_id,
+    )
+    if not sent:
+        return templates.TemplateResponse(
+            request,
+            "saas_admin_tenant.html",
+            admin_tenant_context(
+                request,
+                tenant_id,
+                admin_error="Welcome email failed to send.",
+            ),
+        )
+    return templates.TemplateResponse(
+        request,
+        "saas_admin_tenant.html",
+        admin_tenant_context(
+            request,
+            tenant_id,
+            admin_message=f"Welcome email resent to {addr}.",
+            issued_api_key=issued["api_key"],
+        ),
+    )
+
 
 @router.post("/ui/saas/app/admin/tenants/{tenant_id}")
 def ui_saas_admin_patch_tenant(

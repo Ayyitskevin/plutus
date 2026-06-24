@@ -3,6 +3,17 @@
 # Usage: source "$(dirname "$0")/dogfood-session.sh"
 #        dogfood_session_login "$BASE" "$API_KEY"
 
+# Create tenant + API key when public signup is closed.
+dogfood_bootstrap_tenant() {
+  local slug="$1"
+  local name="${2:-Dogfood Studio}"
+  local root="${PLUTUS_DOGFOOD_ROOT:?set PLUTUS_DOGFOOD_ROOT before calling}"
+  # shellcheck disable=SC1090
+  eval "$(bash "$root/scripts/dogfood-create-tenant.sh" "$slug" "$name" "$slug")"
+  export PLUTUS_DOGFOOD_TENANT_ID="$slug"
+  export PLUTUS_DOGFOOD_API_KEY
+}
+
 dogfood_session_login() {
   local base="$1"
   local api_key="$2"

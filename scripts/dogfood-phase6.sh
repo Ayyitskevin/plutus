@@ -30,9 +30,10 @@ print('  billing:', h['checks'].get('billing', {}))
 print('  lab:', h['checks'].get('lab', {}))
 "
 
-echo "==> Dogfood tenant (signup closed — create via helper)"
+PLUTUS_DOGFOOD_ROOT="$ROOT"
+echo "==> Dogfood tenant"
 SLUG="p6-$(date +%s | tail -c 6)"
-eval "$(bash "$ROOT/scripts/dogfood-create-tenant.sh" "$SLUG" "Phase6 Studio" "$SLUG")"
+dogfood_bootstrap_tenant "$SLUG" "Phase6 Studio"
 API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 echo "  tenant=$SLUG"

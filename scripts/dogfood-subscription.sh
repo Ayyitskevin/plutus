@@ -29,12 +29,13 @@ print('  billing:', b)
 assert b.get('configured') and b.get('reachable'), 'Stripe not ready'
 "
 
-STUDIO="sub-$(date +%s)"
 SLUG="sb-$(date +%s | tail -c 6)"
-echo "==> Signup $SLUG"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
+PLUTUS_DOGFOOD_ROOT="$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/dogfood-session.sh"
+echo "==> Dogfood tenant $SLUG"
+dogfood_bootstrap_tenant "$SLUG" "Subscription Studio"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 
 echo "==> Simulate subscription webhook (checkout.session.completed)"

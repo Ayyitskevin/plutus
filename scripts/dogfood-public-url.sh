@@ -25,11 +25,10 @@ DEMO_DIR="${PLUTUS_DOGFOOD_GALLERY:-$HOME/ai-workspace/argus/data/demo}"
 
 echo "==> Public base: $PUBLIC_BASE"
 
-STUDIO="pub-$(date +%s)"
+PLUTUS_DOGFOOD_ROOT="$ROOT"
 SLUG="u$(date +%s | tail -c 6)"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
+dogfood_bootstrap_tenant "$SLUG" "Public URL Studio"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 dogfood_session_login "$BASE" "$API_KEY"
 

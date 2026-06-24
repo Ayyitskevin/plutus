@@ -31,12 +31,11 @@ assert dio.get('configured'), 'run scripts/wire-dionysus-saas.sh first'
 assert dio.get('status') == 'ok', dio
 "
 
-echo "==> Signup trial tenant"
-STUDIO="dio-$(date +%s)"
+PLUTUS_DOGFOOD_ROOT="$ROOT"
+echo "==> Dogfood tenant"
 SLUG="d$(date +%s | tail -c 6)"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
+dogfood_bootstrap_tenant "$SLUG" "Dionysus Studio"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 echo "  tenant=$SLUG"
 dogfood_session_login "$BASE" "$API_KEY"

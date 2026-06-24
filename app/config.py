@@ -68,6 +68,9 @@ SIGNUP_VERIFY_DEV_BYPASS = (
 MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None
 MISE_HOOK_TOKEN = os.environ.get("PLUTUS_MISE_HOOK_TOKEN") or None
 
+# Optional mnemosyne base for album-bundle cross-sell on client offer pages.
+MNEMOSYNE_URL = os.environ.get("PLUTUS_MNEMOSYNE_URL") or None
+
 # Production hardening
 SAAS_DISABLE_OPENAPI = os.environ.get("PLUTUS_SAAS_DISABLE_OPENAPI", "true").lower() == "true"
 UPLOAD_ANALYZE_STALE_MINUTES = int(os.environ.get("PLUTUS_UPLOAD_ANALYZE_STALE_MINUTES", "15"))

@@ -65,6 +65,12 @@
     Curated print packages from {{ tenant.name }}
     {% if gallery_theme %} · <span class="tag tag-theme">{{ gallery_theme }}</span>{% endif %}
   </p>
+  {% if show_mnemosyne_cta %}
+  <p class="small" style="margin-top:.75rem;padding:.75rem 1rem;background:#f5f2eb;border-radius:8px;border:1px solid var(--line)">
+    <strong>Album design</strong> — your photographer can draft a designed album from this gallery
+    at <a href="{{ mnemosyne_url }}">mnemosyne</a> (companion to these print packages).
+  </p>
+  {% endif %}
 </div>
 
 {% for bundle in bundles %}

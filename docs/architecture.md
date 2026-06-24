@@ -186,6 +186,13 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Admin create tenant accepts **notify email**; sends welcome email with bootstrap API key when SMTP armed
 - `notifications.send_tenant_welcome_email` — login, dashboard, storefront, getting-started steps
 
+## M4 — trust surface + invite polish (GitHub)
+
+- `/privacy` + `/terms` — public trust pages; linked from SaaS landing and login
+- Admin tenant **invite kit** (copy-paste) + **resend welcome email** when SMTP armed
+- `PLUTUS_MNEMOSYNE_URL` — album-bundle cross-sell CTA on client offer pages
+- Dogfood scripts use `dogfood_bootstrap_tenant` (signup closed)
+
 ## M3 — mnemosyne / integration share-links (GitHub)
 
 - `POST /storefront/share-links` accepts optional `tenant_id` for **admin** Bearer (SaaS mode)

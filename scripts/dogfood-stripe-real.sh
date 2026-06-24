@@ -39,12 +39,11 @@ print('  billing:', b)
 assert b.get('reachable'), 'Stripe API unreachable — check STRIPE_SECRET_KEY'
 "
 
-echo "==> Signup + quick run"
-STUDIO="stripe-$(date +%s)"
+PLUTUS_DOGFOOD_ROOT="$ROOT"
+echo "==> Dogfood tenant"
 SLUG="st-$(date +%s | tail -c 6)"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
+dogfood_bootstrap_tenant "$SLUG" "Stripe Studio"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 dogfood_session_login "$BASE" "$API_KEY"
 

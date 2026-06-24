@@ -7,7 +7,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import billing, config, db, homelab, signup, storage, ui_sessions
+from .. import billing, config, db, homelab, notifications, signup, storage, ui_sessions
 from ..auth import resolve_auth
 from ..auth_context import AuthContext
 
@@ -93,6 +93,15 @@ def admin_tenant_context(
     tenant = db.get_tenant(tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="tenant not found")
+    login_url = f"{config.SAAS_PUBLIC_URL.rstrip('/')}/ui/saas/login"
+    slug = tenant.get("store_slug") or tenant_id
+    store_url = f"{config.SAAS_PUBLIC_URL.rstrip('/')}/store/{slug}"
+    invite_kit = (
+        f"Plutus invite — {tenant.get('name') or tenant_id}\n\n"
+        f"Sign in: {login_url}\n"
+        f"Storefront: {store_url}\n\n"
+        "Use the API key from your welcome email (or ask your admin to resend)."
+    )
     return ui_context(
         request,
         title=f"Tenant {tenant_id}",
@@ -103,4 +112,7 @@ def admin_tenant_context(
         admin_message=admin_message,
         admin_error=admin_error,
         issued_api_key=issued_api_key,
+        login_url=login_url,
+        invite_kit=invite_kit,
+        smtp_ready=notifications.smtp_ready(),
     )

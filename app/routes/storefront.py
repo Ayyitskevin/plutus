@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from .. import (
     audit,
     billing,
+    catalog,
     config,
     db,
     homelab,
@@ -68,6 +69,10 @@ def store_offer(request: Request, slug: str, token: str):
             slug=slug,
             run_id=offer["run"]["id"],
             stripe_enabled=billing.stripe_configured(),
+            mnemosyne_url=config.MNEMOSYNE_URL,
+            show_mnemosyne_cta=bool(
+                config.MNEMOSYNE_URL and catalog.bundles_include_album(offer["bundles"])
+            ),
         ),
     )
 
