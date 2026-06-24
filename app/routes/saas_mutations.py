@@ -297,13 +297,12 @@ async def ui_saas_sell_post(
                 return _sell_error_redirect("gallery name and photos are required")
             batch = uploads.create_batch(tenant_id=ctx.tenant_id, name=gallery_name)
             new_batch_id = batch["id"]
-            payload: list[tuple[str, bytes]] = []
-            for f in files:
-                if not f.filename:
-                    continue
-                payload.append((f.filename, await f.read()))
             try:
-                uploads.add_files(tenant_id=ctx.tenant_id, batch_id=new_batch_id, files=payload)
+                await uploads.add_upload_files(
+                    tenant_id=ctx.tenant_id,
+                    batch_id=new_batch_id,
+                    files=files,
+                )
             except uploads.UploadError as exc:
                 return _sell_error_redirect(str(exc))
             audit.record(
@@ -360,13 +359,12 @@ async def ui_saas_upload_post(
         return ctx
     batch = uploads.create_batch(tenant_id=ctx.tenant_id, name=gallery_name)
     batch_id = batch["id"]
-    payload: list[tuple[str, bytes]] = []
-    for f in files:
-        if not f.filename:
-            continue
-        payload.append((f.filename, await f.read()))
     try:
-        uploads.add_files(tenant_id=ctx.tenant_id, batch_id=batch_id, files=payload)
+        await uploads.add_upload_files(
+            tenant_id=ctx.tenant_id,
+            batch_id=batch_id,
+            files=files,
+        )
     except uploads.UploadError as exc:
         return templates.TemplateResponse(
             request,

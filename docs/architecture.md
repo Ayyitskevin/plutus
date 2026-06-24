@@ -103,7 +103,10 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Router split (`app/routes/*`) — thin `main.py`, grouped routers
 - CSRF on cookie-session UI mutations (`app/routes/saas_mutations.py`, `Depends(require_csrf)`)
 
+## Tier 11 (GitHub)
+
+- Streaming multipart uploads (`uploads.add_upload_files` → `storage.save_gallery_stream`, 1MB chunks)
+
 ## Not built yet
 
-- Streaming multipart uploads (still buffers files in memory)
 - Automated Cloudflare tunnel provisioning (manual `cloudflared tunnel create` still required)

@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from . import config
+
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 log = logging.getLogger("plutus.storage")
 
@@ -56,6 +59,78 @@ def _s3_client():
     return boto3.client(**kwargs)
 
 
+def _safe_gallery_name(filename: str) -> str:
+    return Path(filename or "photo.jpg").name
+
+
+def _unique_dest_path(folder: Path, safe: str) -> Path:
+    dest = folder / safe
+    if not dest.exists():
+        return dest
+    stem = Path(safe).stem
+    suffix = Path(safe).suffix
+    n = 1
+    while True:
+        candidate = folder / f"{stem}-{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
+async def save_gallery_stream(
+    tenant_id: str,
+    batch_id: str,
+    filename: str,
+    chunks: AsyncIterator[bytes],
+    *,
+    max_bytes: int,
+) -> str:
+    """Stream gallery bytes to storage without buffering the full file in memory."""
+    safe = _safe_gallery_name(filename)
+    total = 0
+    staged: Path | None = None
+    dest: Path | None = None
+
+    try:
+        if config.STORAGE_BACKEND == "s3" and _s3_ready():
+            cache = _cache_dir(tenant_id, batch_id)
+            staged = _unique_dest_path(cache, safe)
+            with staged.open("wb") as out:
+                async for chunk in chunks:
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise StorageError(
+                            f"{safe} exceeds {max_bytes // (1024 * 1024)}MB limit"
+                        )
+                    out.write(chunk)
+            key = f"{gallery_prefix(tenant_id, batch_id)}/{staged.name}"
+            client = _s3_client()
+            with staged.open("rb") as body:
+                client.upload_fileobj(body, config.S3_BUCKET, key)
+            staged.unlink(missing_ok=True)
+            staged = None
+            uri = f"s3://{config.S3_BUCKET}/{key}"
+            log.info("stored gallery file %s", uri)
+            return uri
+
+        folder = _local_originals_dir(tenant_id, batch_id)
+        dest = _unique_dest_path(folder, safe)
+        with dest.open("wb") as out:
+            async for chunk in chunks:
+                total += len(chunk)
+                if total > max_bytes:
+                    raise StorageError(
+                        f"{safe} exceeds {max_bytes // (1024 * 1024)}MB limit"
+                    )
+                out.write(chunk)
+        return str(dest.resolve())
+    except Exception:
+        for path in (staged, dest):
+            if path is not None and path.exists():
+                path.unlink(missing_ok=True)
+        raise
+
+
 def save_gallery_file(
     tenant_id: str,
     batch_id: str,
@@ -63,7 +138,7 @@ def save_gallery_file(
     data: bytes,
 ) -> str:
     """Persist one gallery original; returns URI (path or s3://)."""
-    safe = Path(filename or "photo.jpg").name
+    safe = _safe_gallery_name(filename)
     if config.STORAGE_BACKEND == "s3" and _s3_ready():
         key = f"{gallery_prefix(tenant_id, batch_id)}/{safe}"
         client = _s3_client()
@@ -76,9 +151,8 @@ def save_gallery_file(
         uri = f"s3://{config.S3_BUCKET}/{key}"
         log.info("stored gallery file %s", uri)
         return uri
-    dest = _local_originals_dir(tenant_id, batch_id) / safe
-    if dest.exists():
-        dest = dest.with_name(f"{dest.stem}-{len(data)}{dest.suffix}")
+    folder = _local_originals_dir(tenant_id, batch_id)
+    dest = _unique_dest_path(folder, safe)
     dest.write_bytes(data)
     return str(dest.resolve())
 
