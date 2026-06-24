@@ -47,7 +47,8 @@ share link → client storefront → Stripe checkout → webhook → order → l
 | `app.orders` / `app.billing` | Stripe checkout, webhooks, simulate pay (dogfood) |
 | `app.lab` / `app.lab_whcc` | Mock lab poll or WHCC stub |
 | `app.health` | `/healthz` dependency checks |
-| `app.main` | FastAPI routes + Jinja templates |
+| `app.main` | FastAPI app shell (lifespan, middleware, static) |
+| `app.routes.*` | HTTP routers — health, API, webhooks, storefront, SaaS UI |
 
 ## Upload batch states
 
@@ -99,10 +100,10 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - DB indexes (upload status, stripe customer, orders)
 - Login rate limit (5/min), `scripts/validate-env.sh`
 - Postgres job in CI; graceful shutdown (`TimeoutStopSec=30`)
+- Router split (`app/routes/*`) — thin `main.py`, grouped routers
+- CSRF on cookie-session UI mutations (`app/routes/saas_mutations.py`, `Depends(require_csrf)`)
 
 ## Not built yet
 
-- Full `main.py` router split (planned: `routes/webhooks`, `routes/saas_ui`, `routes/api`)
-- CSRF enforcement on all `/ui/saas/app/*` POST forms (hidden fields present; logout validated)
 - Streaming multipart uploads (still buffers files in memory)
 - Automated Cloudflare tunnel provisioning (manual `cloudflared tunnel create` still required)

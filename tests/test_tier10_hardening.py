@@ -106,6 +106,61 @@ def test_login_uses_session_cookie_not_raw_key(saas_client):
     assert r.status_code == 200
 
 
+def test_csrf_rejects_session_post_without_token(saas_client):
+    from app import tenants
+
+    tenants.create_tenant("csrf", name="CSRF Co", store_slug="csrf-co")
+    issued = tenants.issue_api_key("csrf")
+    db.update_tenant("csrf", email_verified_at=datetime.now(UTC).isoformat())
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": issued["api_key"]},
+        follow_redirects=False,
+    )
+
+    r = saas_client.post(
+        "/ui/saas/app/settings",
+        data={"notify_email": "ops@csrf.test", "csrf_token": "not-valid"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 403
+
+
+def test_csrf_accepts_hidden_field_on_settings(saas_client):
+    from app import tenants
+
+    tenants.create_tenant("csrfok", name="CSRF OK", store_slug="csrf-ok")
+    issued = tenants.issue_api_key("csrfok")
+    db.update_tenant("csrfok", email_verified_at=datetime.now(UTC).isoformat())
+    saas_client.post(
+        "/ui/saas/login",
+        data={"api_token": issued["api_key"]},
+        follow_redirects=False,
+    )
+    r = saas_client.post(
+        "/ui/saas/app/settings",
+        data={"notify_email": "hello@csrf-ok.test"},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert "settings_saved=1" in r.headers["location"]
+
+
+def test_bearer_post_skips_csrf(saas_client):
+    from app import tenants
+
+    tenants.create_tenant("api", name="API Co", store_slug="api-co")
+    issued = tenants.issue_api_key("api")
+    db.update_tenant("api", email_verified_at=datetime.now(UTC).isoformat())
+    r = saas_client.post(
+        "/recommend/upload-batch",
+        data={"batch_id": "missing"},
+        headers={"Authorization": f"Bearer {issued['api_key']}"},
+        follow_redirects=False,
+    )
+    assert r.status_code != 403
+
+
 def test_upload_worker_requeues_stale_analyzing(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
