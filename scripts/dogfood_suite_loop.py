@@ -135,6 +135,23 @@ def _tenant_id() -> str:
     )
 
 
+def resolve_album_for_mise_gallery(gallery_id: int) -> int | None:
+    """Return a ready mnemosyne album linked to this Mise gallery, if any."""
+    db_path = os.environ.get("MNEMOSYNE_DB") or str(
+        ROOT.parent / "mnemosyne" / "mnemosyne.db"
+    )
+    if not Path(db_path).is_file():
+        return None
+    import sqlite3
+
+    row = sqlite3.connect(db_path).execute(
+        "SELECT id FROM albums WHERE mise_gallery_id = ? AND status = 'ready' "
+        "ORDER BY id DESC LIMIT 1",
+        (gallery_id,),
+    ).fetchone()
+    return int(row[0]) if row else None
+
+
 def run_plutus_mise_hook(gallery_id: int) -> dict:
     """Direct Plutus SaaS path — skips Argus when homelab Argus points at :8030."""
     token = os.environ.get("PLUTUS_MISE_HOOK_TOKEN", "")
@@ -300,6 +317,10 @@ def main() -> int:
     album_id = args.mnemosyne_album_id
     if album_id is None and os.environ.get("MNEMOSYNE_ALBUM_ID"):
         album_id = int(os.environ["MNEMOSYNE_ALBUM_ID"])
+    if album_id is None and not args.skip_mnemosyne:
+        album_id = resolve_album_for_mise_gallery(args.gallery_id)
+        if album_id:
+            print(f"==> Mnemosyne album #{album_id} (mise gallery #{args.gallery_id})")
 
     print("==> Health")
     for name, url in (
