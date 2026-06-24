@@ -62,6 +62,49 @@ def test_share_link_api_returns_public_url(saas_client):
     assert body["store_slug"] == "shop1"
 
 
+def test_admin_share_link_requires_tenant_id(saas_client, monkeypatch):
+    monkeypatch.setattr(config, "MISE_HOOK_TENANT_ID", None)
+    _, run_id = _tenant_run("shop-admin")
+    r = saas_client.post(
+        "/storefront/share-links",
+        headers={"Authorization": "Bearer admin-secret"},
+        data={"run_id": run_id},
+    )
+    assert r.status_code == 403
+
+
+def test_admin_share_link_with_tenant_id(saas_client, monkeypatch):
+    monkeypatch.setattr(config, "MISE_HOOK_TENANT_ID", None)
+    _, run_id = _tenant_run("shop-int")
+    r = saas_client.post(
+        "/storefront/share-links",
+        headers={"Authorization": "Bearer admin-secret"},
+        data={"run_id": run_id, "tenant_id": "shop-int", "label": "Integration"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["store_slug"] == "shop-int"
+    assert f"/store/shop-int/offer/{body['token']}" in body["public_url"]
+
+
+def test_admin_share_link_defaults_mise_hook_tenant(saas_client, monkeypatch):
+    monkeypatch.setattr(config, "MISE_HOOK_TENANT_ID", "shop-hook")
+    tenants.create_tenant("shop-hook", name="Hook", store_slug="shop-hook")
+    from app import service
+
+    folder = config.DATA_DIR / "hook-g"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "a.jpg").write_bytes(_tiny_jpeg())
+    run_id = service.analyze_folder(folder, name="Hook", tenant_id="shop-hook")["run_id"]
+    r = saas_client.post(
+        "/storefront/share-links",
+        headers={"Authorization": "Bearer admin-secret"},
+        data={"run_id": run_id, "label": "Mise default"},
+    )
+    assert r.status_code == 200
+    assert r.json()["store_slug"] == "shop-hook"
+
+
 def test_store_offer_rejects_expired_and_malformed_expiry(saas_client):
     api_key, run_id = _tenant_run("shop-exp")
     from app.storefront import StorefrontError, resolve_offer

@@ -186,6 +186,14 @@ Bundles adapt — e.g. metal accent prints for food detail shots, wedding album 
 - Admin create tenant accepts **notify email**; sends welcome email with bootstrap API key when SMTP armed
 - `notifications.send_tenant_welcome_email` — login, dashboard, storefront, getting-started steps
 
+## M3 — mnemosyne / integration share-links (GitHub)
+
+- `POST /storefront/share-links` accepts optional `tenant_id` for **admin** Bearer (SaaS mode)
+- Defaults to `PLUTUS_MISE_HOOK_TENANT_ID` when `tenant_id` omitted — mnemosyne sets `MNEMOSYNE_PLUTUS_TENANT_ID`
+- `scripts/dogfood-mnemosyne-link.sh` — admin-token offer mint E2E
+- `scripts/dogfood-create-tenant.sh` — dogfood tenant + API key without public signup
+- `scripts/dogfood-welcome-email.sh` — welcome email via local SMTP catcher
+
 ## Not built yet
 
 - WHCC live API credentials on production fleet (HMAC + stub path ready; `scripts/wire-whcc.sh`)

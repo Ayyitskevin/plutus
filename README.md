@@ -67,7 +67,7 @@ journalctl --user -u plutus-saas -f
 | `POST /recommend/mise-gallery` | Bearer | Mise publish hook |
 | `POST /recommend/upload-batch` | Bearer | Tenant upload → analyze (202 async) |
 | `GET /upload-batches/{id}/status` | Bearer | Poll async analyze |
-| `POST /storefront/share-links` | Bearer | Client offer URL |
+| `POST /storefront/share-links` | Bearer | Client offer URL (tenant key, or admin + `tenant_id`) |
 | `POST /store/{slug}/offer/{token}/checkout` | — | Stripe client checkout |
 | `POST /webhooks/stripe` | Stripe sig | Payment → order |
 | `POST /webhooks/mise/gallery-published` | Hook token | Mise publish → recommend |

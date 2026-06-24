@@ -30,12 +30,10 @@ print('  billing:', h['checks'].get('billing', {}))
 print('  lab:', h['checks'].get('lab', {}))
 "
 
-echo "==> Signup trial tenant"
-STUDIO="phase6-$(date +%s)"
+echo "==> Dogfood tenant (signup closed — create via helper)"
 SLUG="p6-$(date +%s | tail -c 6)"
-SIGNUP=$(curl -sf -X POST "$BASE/ui/saas/signup" \
-  -d "studio_name=${STUDIO}&email=${SLUG}@dogfood.test&store_slug=${SLUG}")
-API_KEY=$(echo "$SIGNUP" | grep -oE 'plutus_tk_[a-z0-9_-]+' | head -1)
+eval "$(bash "$ROOT/scripts/dogfood-create-tenant.sh" "$SLUG" "Phase6 Studio" "$SLUG")"
+API_KEY="$PLUTUS_DOGFOOD_API_KEY"
 test -n "$API_KEY"
 echo "  tenant=$SLUG"
 dogfood_session_login "$BASE" "$API_KEY"
