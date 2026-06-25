@@ -36,22 +36,47 @@ ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env}"
 RATE_LIMIT_WAS=""
 COOKIE_SECURE_WAS=""
 if [[ -f "$ENV_FILE" ]] && grep -q '^PLUTUS_RATE_LIMIT_ENABLED=' "$ENV_FILE"; then
-  RATE_LIMIT_WAS="$(grep '^PLUTUS_RATE_LIMIT_ENABLED=' "$ENV_FILE" | tail -1)"
+  RATE_LIMIT_WAS="$(grep '^PLUTUS_RATE_LIMIT_ENABLED=' "$ENV_FILE" | head -1)"
 fi
 if [[ -f "$ENV_FILE" ]] && grep -q '^PLUTUS_UI_COOKIE_SECURE=' "$ENV_FILE"; then
-  COOKIE_SECURE_WAS="$(grep '^PLUTUS_UI_COOKIE_SECURE=' "$ENV_FILE" | tail -1)"
+  COOKIE_SECURE_WAS="$(grep '^PLUTUS_UI_COOKIE_SECURE=' "$ENV_FILE" | head -1)"
 fi
+_upsert_env() {
+  local key="$1" val="$2"
+  python3 - <<PY
+from pathlib import Path
+path = Path("${ENV_FILE}")
+key, val = "${key}", "${val}"
+lines = path.read_text().splitlines() if path.exists() else []
+out = [line for line in lines if not (line.startswith(f"{key}=") and not line.strip().startswith("#"))]
+out.append(f"{key}={val}")
+path.write_text("\\n".join(out).rstrip() + "\\n")
+PY
+}
+_remove_env_key() {
+  local key="$1"
+  python3 - <<PY
+from pathlib import Path
+path = Path("${ENV_FILE}")
+key = "${key}"
+if not path.exists():
+    raise SystemExit(0)
+lines = path.read_text().splitlines()
+out = [line for line in lines if not (line.startswith(f"{key}=") and not line.strip().startswith("#"))]
+path.write_text("\\n".join(out).rstrip() + ("\\n" if out else ""))
+PY
+}
 restore_dogfood_env() {
   if [[ ! -f "$ENV_FILE" ]]; then
     return 0
   fi
   if [[ -n "$RATE_LIMIT_WAS" ]]; then
-    sed -i "s|^PLUTUS_RATE_LIMIT_ENABLED=.*|${RATE_LIMIT_WAS}|" "$ENV_FILE"
+    _upsert_env PLUTUS_RATE_LIMIT_ENABLED "${RATE_LIMIT_WAS#PLUTUS_RATE_LIMIT_ENABLED=}"
   fi
   if [[ -n "$COOKIE_SECURE_WAS" ]]; then
-    sed -i "s|^PLUTUS_UI_COOKIE_SECURE=.*|${COOKIE_SECURE_WAS}|" "$ENV_FILE"
-  elif grep -q '^PLUTUS_UI_COOKIE_SECURE=' "$ENV_FILE"; then
-    sed -i '/^PLUTUS_UI_COOKIE_SECURE=/d' "$ENV_FILE"
+    _upsert_env PLUTUS_UI_COOKIE_SECURE "${COOKIE_SECURE_WAS#PLUTUS_UI_COOKIE_SECURE=}"
+  else
+    _remove_env_key PLUTUS_UI_COOKIE_SECURE
   fi
   if systemctl --user is-active plutus-saas >/dev/null 2>&1; then
     systemctl --user restart plutus-saas
@@ -60,16 +85,8 @@ restore_dogfood_env() {
 trap restore_dogfood_env EXIT
 
 if [[ -f "$ENV_FILE" ]]; then
-  if grep -q '^PLUTUS_RATE_LIMIT_ENABLED=' "$ENV_FILE"; then
-    sed -i 's/^PLUTUS_RATE_LIMIT_ENABLED=.*/PLUTUS_RATE_LIMIT_ENABLED=false/' "$ENV_FILE"
-  else
-    echo "PLUTUS_RATE_LIMIT_ENABLED=false" >>"$ENV_FILE"
-  fi
-  if grep -q '^PLUTUS_UI_COOKIE_SECURE=' "$ENV_FILE"; then
-    sed -i 's/^PLUTUS_UI_COOKIE_SECURE=.*/PLUTUS_UI_COOKIE_SECURE=false/' "$ENV_FILE"
-  else
-    echo "PLUTUS_UI_COOKIE_SECURE=false" >>"$ENV_FILE"
-  fi
+  _upsert_env PLUTUS_RATE_LIMIT_ENABLED false
+  _upsert_env PLUTUS_UI_COOKIE_SECURE false
   if systemctl --user is-active plutus-saas >/dev/null 2>&1; then
     echo "==> Restart plutus-saas (dogfood rate-limit bypass)"
     systemctl --user restart plutus-saas
