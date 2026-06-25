@@ -24,8 +24,8 @@ PYTEST="${PY:+$PY/}pytest"
 echo "==> ruff check"
 "$RUFF" check app tests
 
-echo "==> pytest (SQLite suite + Postgres backend tests)"
+echo "==> pytest (studio suite + Postgres backend tests)"
 PLUTUS_DATABASE_URL= PLUTUS_TEST_DATABASE_URL="$PLUTUS_TEST_DATABASE_URL" \
-  "$PYTEST" tests/ -q
+  bash scripts/ci-smoke.sh
 
 echo "==> Postgres CI OK"

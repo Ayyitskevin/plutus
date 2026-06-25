@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build the production image and smoke-test /healthz inside a throwaway container.
+# Build the studio image and smoke-test /healthz inside a throwaway container.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 IMAGE="${PLUTUS_DOCKER_IMAGE:-plutus:ci}"
-PORT="${PLUTUS_DOCKER_SMOKE_PORT:-18031}"
+PORT="${PLUTUS_DOCKER_SMOKE_PORT:-18030}"
 CONTAINER="plutus-ci-smoke-$$"
 DATA_DIR=$(mktemp -d)
 trap 'docker rm -f "$CONTAINER" 2>/dev/null || true; rm -rf "$DATA_DIR"' EXIT
@@ -20,12 +20,10 @@ docker build -t "$IMAGE" .
 
 echo "==> run container on :$PORT"
 docker run -d --name "$CONTAINER" \
-  -p "127.0.0.1:${PORT}:8031" \
-  -e PLUTUS_SAAS_MODE=true \
+  -p "127.0.0.1:${PORT}:8030" \
   -e PLUTUS_API_TOKEN=ci-admin-token \
-  -e PLUTUS_TENANT_KEY_PEPPER=ci-pepper-secret \
   -e PLUTUS_RATE_LIMIT_ENABLED=false \
-  -e PLUTUS_SAAS_PUBLIC_URL="http://127.0.0.1:${PORT}" \
+  -e PLUTUS_PUBLIC_URL="http://127.0.0.1:${PORT}" \
   -v "${DATA_DIR}:/data" \
   "$IMAGE"
 
@@ -38,10 +36,6 @@ done
 
 echo "==> /healthz"
 HEALTH=$(curl -sf "http://127.0.0.1:${PORT}/healthz")
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d.get('service')=='plutus', d" "$HEALTH"
-
-echo "==> /saas/status"
-STATUS=$(curl -sf "http://127.0.0.1:${PORT}/saas/status")
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d.get('saas_mode') is True, d" "$STATUS"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d.get('service')=='plutus', d; assert d.get('studio_mode') is True, d" "$HEALTH"
 
 echo "ci-docker: OK ($IMAGE)"

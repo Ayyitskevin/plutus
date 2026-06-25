@@ -11,15 +11,15 @@ COPY app ./app
 COPY templates ./templates
 COPY static ./static
 
-RUN pip install --no-cache-dir -e '.[saas]'
+RUN pip install --no-cache-dir -e .
 
-ENV PLUTUS_SAAS_MODE=true
 ENV PLUTUS_DATA_DIR=/data
 ENV PLUTUS_HOST=0.0.0.0
-ENV PLUTUS_PORT=8031
+ENV PLUTUS_PORT=8030
+ENV PLUTUS_PUBLIC_URL=http://127.0.0.1:8030
 
 RUN mkdir -p /data
 
-EXPOSE 8031
+EXPOSE 8030
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8031"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8030"]
