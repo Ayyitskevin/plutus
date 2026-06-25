@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _load_env_file(path: Path) -> None:
+def _load_env_file(path: Path, *, overwrite: bool = False) -> None:
     if not path.is_file():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -38,14 +38,20 @@ def _load_env_file(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, _, val = line.partition("=")
-        os.environ.setdefault(key.strip(), val.strip())
+        key = key.strip()
+        if overwrite or key not in os.environ:
+            os.environ[key] = val.strip()
 
 
 def _load_dotenv() -> None:
-    _load_env_file(ROOT / ".env.homelab")
-    _load_env_file(ROOT / ".env")
-    _load_env_file(ROOT.parent / "argus" / ".env")
-    _load_env_file(ROOT.parent / "mnemosyne" / ".env")
+    # Homelab env wins — dev .env may define a different PLUTUS_API_TOKEN.
+    for path in (
+        ROOT / ".env",
+        ROOT.parent / "argus" / ".env",
+        ROOT.parent / "mnemosyne" / ".env",
+    ):
+        _load_env_file(path)
+    _load_env_file(ROOT / ".env.homelab", overwrite=True)
 
 
 def _get(url: str, *, headers: dict | None = None, timeout: float = 15.0) -> tuple[int, str]:

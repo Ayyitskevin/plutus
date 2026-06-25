@@ -6,10 +6,11 @@ cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/.venv/bin/activate" 2>/dev/null || true
 
+# Homelab env wins last — .env may carry a dev token that does not match :8030.
 for ENV_FILE in \
-  "${PLUTUS_ENV_FILE:-$ROOT/.env.homelab}" \
   "$ROOT/.env" \
-  "$ROOT/../argus/.env"
+  "$ROOT/../argus/.env" \
+  "${PLUTUS_ENV_FILE:-$ROOT/.env.homelab}"
 do
   if [[ -f "$ENV_FILE" ]]; then
     set -a
