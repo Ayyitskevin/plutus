@@ -126,7 +126,10 @@ def analyze_mise_gallery(
     )
     result["mise_gallery_id"] = mise_gallery_id
     result["argus_run_id"] = effective_argus
-    result.update(studio_run_urls(int(result["run_id"])))
+    run_id = int(result["run_id"])
+    result.update(studio_run_urls(run_id))
+    result["bundle_count"] = len(result.get("bundles") or [])
+    result["estimated_total_cents"] = int(result.get("estimated_total_cents") or 0)
     return result
 
 

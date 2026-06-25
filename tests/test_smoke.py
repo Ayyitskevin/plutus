@@ -40,3 +40,13 @@ def test_analyze_demo_folder(client, tmp_path):
     run = client.get(f"/runs/{body['run_id']}")
     assert run.status_code == 200
     assert b"Upsell bundles" in run.content
+
+
+def test_studio_run_urls(monkeypatch):
+    monkeypatch.setattr(config, "PUBLIC_URL", "http://plutus.test")
+    from app.service import studio_run_urls
+
+    assert studio_run_urls(5) == {
+        "review_url": "http://plutus.test/runs/5",
+        "pitch_url": "http://plutus.test/runs/5/pitch.txt",
+    }

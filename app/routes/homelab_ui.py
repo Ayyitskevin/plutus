@@ -96,12 +96,20 @@ def view_run(request: Request, run_id: int):
         share_links = db.list_storefront_tokens(ctx.tenant_id, run_id=run_id)
     elif homelab.store_enabled():
         share_links = db.list_storefront_tokens(homelab.tenant_id(), run_id=run_id)
+    gallery = db.get_gallery(row["gallery_id"])
+    mise_gallery_id = gallery.get("mise_gallery_id") if gallery else None
+    mise_gallery_url = (
+        f"{config.MISE_ADMIN_URL}/admin/galleries/{mise_gallery_id}"
+        if config.MISE_ADMIN_URL and mise_gallery_id
+        else None
+    )
     return templates.TemplateResponse(
         request,
         "run.html",
         ui_context(
             request,
             run=row,
+            mise_gallery_url=mise_gallery_url,
             bundles=payload.get("bundles") or [],
             top_photos=payload.get("top_photos") or [],
             photo_count=payload.get("photo_count", 0),

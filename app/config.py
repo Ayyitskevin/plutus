@@ -49,6 +49,8 @@ TENANT_KEY_PEPPER = os.environ.get("PLUTUS_TENANT_KEY_PEPPER") or API_TOKEN or "
 SAAS_PUBLIC_URL = os.environ.get("PLUTUS_SAAS_PUBLIC_URL", f"http://{HOST}:{PORT}")
 # Base URL for review/pitch links returned to Mise admin
 PUBLIC_URL = os.environ.get("PLUTUS_PUBLIC_URL", SAAS_PUBLIC_URL).rstrip("/")
+# Optional — "back to Mise gallery" link on Plutus run review pages
+MISE_ADMIN_URL = os.environ.get("PLUTUS_MISE_ADMIN_URL", "").rstrip("/")
 
 # Self-service signup — closed by default. When SMTP is unconfigured,
 # verification silently no-ops and new tenants auto-activate UNVERIFIED, so a
