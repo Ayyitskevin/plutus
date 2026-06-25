@@ -73,6 +73,21 @@ def test_recommend_mise_gallery_rejects_missing_token(studio_client):
     assert r.status_code == 401
 
 
+def test_recommend_mise_gallery_accepts_hook_token(studio_client, tmp_path, monkeypatch):
+    """Flow Mise posts the fleet hook secret (not the admin API token)."""
+    monkeypatch.setattr(config, "MISE_HOOK_TOKEN", "fleet-hook-secret")
+    row = _gallery_folder(tmp_path)
+    with patch("app.mise_client.get_gallery", return_value=row):
+        with patch("app.mise_client.is_enabled", return_value=True):
+            r = studio_client.post(
+                "/recommend/mise-gallery",
+                data={"mise_gallery_id": 3},
+                headers={"Authorization": "Bearer fleet-hook-secret"},
+            )
+    assert r.status_code == 200
+    assert r.json()["run_id"] >= 1
+
+
 def test_mise_webhook_not_registered_in_studio_mode(studio_client):
     """Legacy SaaS webhook path is unwired in studio-only deployments."""
     r = studio_client.post(
