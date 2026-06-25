@@ -9,12 +9,9 @@ ORG_SLUG="${PLUTUS_DIONYSUS_ORG_SLUG:-blue-plate}"
 DIO_URL="${PLUTUS_DIONYSUS_URL:-http://127.0.0.1:8450}"
 
 if [[ -f "$DIO_ENV" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$DIO_ENV"
-  set +a
+  TOKEN="$(grep -m1 '^DIONYSUS_MISE_IMPORT_TOKEN=' "$DIO_ENV" | cut -d= -f2- || true)"
 fi
-TOKEN="${PLUTUS_DIONYSUS_TOKEN:-${DIONYSUS_MISE_IMPORT_TOKEN:-${MISE_FLEET_TOKEN:-}}}"
+TOKEN="${TOKEN:-${MISE_FLEET_TOKEN:-}}"
 if [[ -z "$TOKEN" ]]; then
   echo "Set DIONYSUS_MISE_IMPORT_TOKEN in $DIO_ENV" >&2
   exit 1
