@@ -50,3 +50,23 @@ def test_studio_run_urls(monkeypatch):
         "review_url": "http://plutus.test/runs/5",
         "pitch_url": "http://plutus.test/runs/5/pitch.txt",
     }
+
+
+def test_run_page_renders_photo_thumbnails(client, tmp_path):
+    folder = tmp_path / "gallery"
+    folder.mkdir()
+    Image.new("RGB", (120, 90), color=(200, 40, 40)).save(folder / "hero.jpg")
+
+    created = client.post(
+        "/analyze-folder",
+        data={"folder": str(folder), "name": "Thumb test"},
+    )
+    run_id = created.json()["run_id"]
+    page = client.get(f"/runs/{run_id}")
+    assert page.status_code == 200
+    assert f"/runs/{run_id}/photo/hero.jpg" in page.text
+
+    photo = client.get(f"/runs/{run_id}/photo/hero.jpg")
+    assert photo.status_code == 200
+    assert photo.headers["content-type"].startswith("image/jpeg")
+    assert len(photo.content) > 100

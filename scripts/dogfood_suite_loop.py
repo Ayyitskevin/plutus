@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Suite integration loop: Mise → Argus → Plutus offer → Mnemosyne share CTA.
+"""Studio integration loop: Mise → Argus → Plutus review + pitch.
 
 Usage:
   python scripts/dogfood_suite_loop.py
-  python scripts/dogfood_suite_loop.py --gallery-id 1 --mnemosyne-album-id 3
+  python scripts/dogfood_suite_loop.py --gallery-id 1
+  python scripts/dogfood_suite_loop.py --plutus-only --gallery-id 1
 
-Env (from plutus .env or shell):
+Env (from plutus .env.homelab / argus .env or shell):
   ARGUS_API_TOKEN, ARGUS_HOST, ARGUS_PORT
-  PLUTUS_SAAS_URL (default http://127.0.0.1:8031) — used for offer mint verify
+  PLUTUS_URL or ARGUS_PLUTUS_URL (default http://127.0.0.1:8030)
+  PLUTUS_API_TOKEN or ARGUS_PLUTUS_TOKEN — for direct recommend (--plutus-only)
+
+Optional Mnemosyne (--mnemosyne-album-id):
   MNEMOSYNE_URL, MNEMOSYNE_DOGFOOD_EMAIL, MNEMOSYNE_DOGFOOD_PASSWORD
-  MNEMOSYNE_ALBUM_ID — ready album for plutus-generate (optional)
 """
 from __future__ import annotations
 
@@ -39,6 +42,7 @@ def _load_env_file(path: Path) -> None:
 
 
 def _load_dotenv() -> None:
+    _load_env_file(ROOT / ".env.homelab")
     _load_env_file(ROOT / ".env")
     _load_env_file(ROOT.parent / "argus" / ".env")
     _load_env_file(ROOT.parent / "mnemosyne" / ".env")
@@ -110,8 +114,22 @@ def _argus_base() -> str:
     return f"http://{host}:{port}"
 
 
-def _plutus_saas_base() -> str:
-    return os.environ.get("PLUTUS_SAAS_URL", "http://127.0.0.1:8031").rstrip("/")
+def _plutus_base() -> str:
+    return (
+        os.environ.get("PLUTUS_URL")
+        or os.environ.get("ARGUS_PLUTUS_URL")
+        or os.environ.get("PLUTUS_SAAS_URL")
+        or "http://127.0.0.1:8030"
+    ).rstrip("/")
+
+
+def _plutus_token() -> str:
+    return (
+        os.environ.get("PLUTUS_API_TOKEN")
+        or os.environ.get("ARGUS_PLUTUS_TOKEN")
+        or os.environ.get("PLUTUS_MISE_HOOK_TOKEN")
+        or _token()
+    )
 
 
 def _mnemosyne_base() -> str:
@@ -152,26 +170,41 @@ def resolve_album_for_mise_gallery(gallery_id: int) -> int | None:
     return int(row[0]) if row else None
 
 
-def run_plutus_mise_hook(gallery_id: int) -> dict:
-    """Direct Plutus SaaS path — skips Argus when homelab Argus points at :8030."""
-    token = os.environ.get("PLUTUS_MISE_HOOK_TOKEN", "")
+def run_plutus_studio_recommend(gallery_id: int) -> dict:
+    """Direct Plutus studio recommend — skips Argus run-all."""
+    token = _plutus_token()
     if not token:
-        raise RuntimeError("PLUTUS_MISE_HOOK_TOKEN required")
+        raise RuntimeError("PLUTUS_API_TOKEN or ARGUS_PLUTUS_TOKEN required")
+    fields = {"mise_gallery_id": str(gallery_id)}
+    argus_run = os.environ.get("ARGUS_RUN_ID")
+    if argus_run:
+        fields["argus_run_id"] = argus_run
     code, body, _ = _post_form(
-        f"{_plutus_saas_base()}/webhooks/mise/gallery-published",
-        {"mise_gallery_id": str(gallery_id)},
+        f"{_plutus_base()}/recommend/mise-gallery",
+        fields,
         headers={"Authorization": f"Bearer {token}"},
         timeout=120.0,
     )
     if code != 200:
-        raise RuntimeError(f"plutus hook HTTP {code}: {body[:240]}")
+        raise RuntimeError(f"plutus recommend HTTP {code}: {body[:240]}")
     payload = json.loads(body)
+    return _studio_result_from_payload(payload)
+
+
+def _studio_result_from_payload(payload: dict) -> dict:
     run_id = payload.get("run_id")
-    offer = payload.get("offer_url") or ""
+    review = payload.get("review_url") or ""
+    pitch = payload.get("pitch_url") or ""
+    if run_id and not review:
+        base = _plutus_base()
+        review = f"{base}/runs/{run_id}"
+        pitch = f"{base}/runs/{run_id}/pitch.txt"
     bundles = payload.get("bundles") or []
+    bundle_n = payload.get("bundle_count") or len(bundles)
     return {
-        "offer_url": offer,
-        "message": f"upsell run {run_id} ({len(bundles)} bundles)",
+        "review_url": review,
+        "pitch_url": pitch,
+        "message": f"bundles run {run_id} ({bundle_n} bundles)",
         "plutus_run_id": run_id,
     }
 
@@ -192,32 +225,34 @@ def run_argus_pipeline(gallery_id: int) -> dict:
     qs = urllib.parse.parse_qs(urllib.parse.urlparse(loc).query)
     if qs.get("error"):
         raise RuntimeError(urllib.parse.unquote_plus(qs["error"][0]))
-    offer = urllib.parse.unquote_plus((qs.get("offer_url") or [""])[0])
+    review = urllib.parse.unquote_plus((qs.get("review_url") or [""])[0])
+    pitch = urllib.parse.unquote_plus((qs.get("pitch_url") or [""])[0])
     msg = urllib.parse.unquote_plus((qs.get("msg") or [""])[0])
-    if not offer:
-        raise RuntimeError(f"pipeline returned no offer_url — {msg}")
-    run_match = re.search(r"upsell (?:run (\d+)|skipped \(run (\d+)\))", msg)
+    if not review or not pitch:
+        raise RuntimeError(f"pipeline returned no review/pitch — {msg}")
+    run_match = re.search(r"bundles (?:run (\d+)|skipped \(run (\d+)\))", msg)
     plutus_run_id = None
     if run_match:
         plutus_run_id = int(run_match.group(1) or run_match.group(2))
-    return {"offer_url": offer, "message": msg, "plutus_run_id": plutus_run_id}
+    return {
+        "review_url": review,
+        "pitch_url": pitch,
+        "message": msg,
+        "plutus_run_id": plutus_run_id,
+    }
 
 
-def _local_offer_url(public_url: str) -> str:
-    """Dogfood hits :8031 locally even when offers are minted with the public URL."""
-    public_base = os.environ.get("PLUTUS_SAAS_PUBLIC_URL", "").rstrip("/")
-    local_base = _plutus_saas_base()
-    if public_base and public_url.startswith(public_base):
-        return public_url.replace(public_base, local_base, 1)
-    return public_url
-
-
-def verify_plutus_offer(offer_url: str) -> None:
-    code, body = _get(_local_offer_url(offer_url), timeout=30.0)
+def verify_studio_run(*, review_url: str, pitch_url: str) -> None:
+    code, body = _get(review_url, timeout=30.0)
     if code != 200:
-        raise RuntimeError(f"offer page HTTP {code}")
-    if not re.search(r"package|bundle|buy", body, re.I):
-        raise RuntimeError("offer page missing checkout content")
+        raise RuntimeError(f"review page HTTP {code}")
+    if not re.search(r"Upsell bundles|bundle", body, re.I):
+        raise RuntimeError("review page missing bundle content")
+    code, pitch = _get(pitch_url, timeout=30.0)
+    if code != 200:
+        raise RuntimeError(f"pitch HTTP {code}")
+    if len(pitch.strip()) < 20:
+        raise RuntimeError("pitch.txt too short")
 
 
 def mnemosyne_attach_offer(*, album_id: int, plutus_run_id: int) -> dict:
@@ -309,7 +344,12 @@ def main() -> int:
     parser.add_argument(
         "--plutus-only",
         action="store_true",
-        help="Call Plutus Mise webhook directly (skip Argus run-all)",
+        help="Call Plutus /recommend/mise-gallery directly (skip Argus run-all)",
+    )
+    parser.add_argument(
+        "--with-mnemosyne",
+        action="store_true",
+        help="Also run Mnemosyne plutus-generate + share CTA (needs album id)",
     )
     args = parser.parse_args()
 
@@ -317,7 +357,8 @@ def main() -> int:
     album_id = args.mnemosyne_album_id
     if album_id is None and os.environ.get("MNEMOSYNE_ALBUM_ID"):
         album_id = int(os.environ["MNEMOSYNE_ALBUM_ID"])
-    if album_id is None and not args.skip_mnemosyne:
+    want_mnemosyne = args.with_mnemosyne and not args.skip_mnemosyne
+    if album_id is None and want_mnemosyne:
         album_id = resolve_album_for_mise_gallery(args.gallery_id)
         if album_id:
             print(f"==> Mnemosyne album #{album_id} (mise gallery #{args.gallery_id})")
@@ -325,7 +366,7 @@ def main() -> int:
     print("==> Health")
     for name, url in (
         ("argus", f"{_argus_base()}/healthz"),
-        ("plutus_saas", f"{_plutus_saas_base()}/healthz"),
+        ("plutus", f"{_plutus_base()}/healthz"),
         ("mnemosyne", f"{_mnemosyne_base()}/healthz"),
     ):
         code, _ = _get(url)
@@ -334,12 +375,12 @@ def main() -> int:
             return 2
 
     if args.plutus_only:
-        print(f"\n==> Plutus Mise webhook gallery #{args.gallery_id}")
+        print(f"\n==> Plutus studio recommend gallery #{args.gallery_id}")
     else:
         print(f"\n==> Argus pipeline run-all gallery #{args.gallery_id}")
     try:
         pipe = (
-            run_plutus_mise_hook(args.gallery_id)
+            run_plutus_studio_recommend(args.gallery_id)
             if args.plutus_only
             else run_argus_pipeline(args.gallery_id)
         )
@@ -347,21 +388,25 @@ def main() -> int:
         print(f"  FAIL: {exc}")
         return 2
     print(f"  steps: {pipe['message']}")
-    print(f"  offer: {pipe['offer_url']}")
+    print(f"  review: {pipe['review_url']}")
+    print(f"  pitch: {pipe['pitch_url']}")
     if pipe.get("plutus_run_id"):
         print(f"  plutus_run_id: {pipe['plutus_run_id']}")
 
-    print("\n==> Plutus offer storefront")
+    print("\n==> Plutus studio review + pitch")
     try:
-        verify_plutus_offer(pipe["offer_url"])
+        verify_studio_run(
+            review_url=pipe["review_url"],
+            pitch_url=pipe["pitch_url"],
+        )
     except Exception as exc:
         print(f"  FAIL: {exc}")
         return 2
-    print("  storefront OK")
+    print("  studio OK")
 
     result = {"pipeline": pipe, "mnemosyne": None}
 
-    if not args.skip_mnemosyne and album_id and pipe.get("plutus_run_id"):
+    if want_mnemosyne and album_id and pipe.get("plutus_run_id"):
         print(f"\n==> Mnemosyne album #{album_id} plutus-generate + share CTA")
         try:
             result["mnemosyne"] = mnemosyne_attach_offer(
@@ -374,7 +419,7 @@ def main() -> int:
         print(f"  share: {result['mnemosyne']['share_url']}")
         if result["mnemosyne"].get("offer_saved"):
             print(f"  saved offer: {result['mnemosyne']['offer_saved']}")
-    elif not args.skip_mnemosyne:
+    elif want_mnemosyne:
         if not album_id:
             print("\n==> Mnemosyne skipped (set --mnemosyne-album-id or MNEMOSYNE_ALBUM_ID)")
         else:

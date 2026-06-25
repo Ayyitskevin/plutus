@@ -29,6 +29,8 @@ from ..gallery_media import (
     FULL_MAX_EDGE,
     THUMB_MAX_EDGE,
     GalleryMediaError,
+    enrich_bundles_for_run,
+    enrich_top_photos_for_run,
     render_jpeg,
     resolve_photo_file,
 )
@@ -103,6 +105,8 @@ def view_run(request: Request, run_id: int):
         if config.MISE_ADMIN_URL and mise_gallery_id
         else None
     )
+    bundles = enrich_bundles_for_run(run_id, payload.get("bundles") or [])
+    top_photos = enrich_top_photos_for_run(run_id, payload.get("top_photos") or [])
     return templates.TemplateResponse(
         request,
         "run.html",
@@ -110,8 +114,8 @@ def view_run(request: Request, run_id: int):
             request,
             run=row,
             mise_gallery_url=mise_gallery_url,
-            bundles=payload.get("bundles") or [],
-            top_photos=payload.get("top_photos") or [],
+            bundles=bundles,
+            top_photos=top_photos,
             photo_count=payload.get("photo_count", 0),
             estimated_total_cents=payload.get("estimated_total_cents", 0),
             gallery_theme=payload.get("gallery_theme"),
@@ -183,6 +187,33 @@ async def ui_homelab_run_edit(request: Request, run_id: int = Form(...)):
             return HTMLResponse("Run not found", status_code=404)
         return templates.TemplateResponse(request, "run_edit.html", ctx_data, status_code=400)
     return RedirectResponse(f"/runs/{run_id}?edited=1", status_code=303)
+
+
+@router.get("/runs/{run_id}/photo/{filename}")
+def run_photo(request: Request, run_id: int, filename: str, size: str = Query("thumb")):
+    ctx = request_auth(request)
+    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+    if not row:
+        return Response(status_code=404)
+    gallery = db.get_gallery(row["gallery_id"])
+    try:
+        path = resolve_photo_file(
+            gallery=gallery,
+            payload=row["payload"],
+            filename=filename,
+        )
+        max_edge = FULL_MAX_EDGE if size == "full" else THUMB_MAX_EDGE
+        data = render_jpeg(path, max_edge=max_edge)
+    except GalleryMediaError:
+        return Response(status_code=404)
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'inline; filename="{path.name}"',
+        },
+    )
 
 
 @router.get("/runs/{run_id}/json", response_class=JSONResponse)

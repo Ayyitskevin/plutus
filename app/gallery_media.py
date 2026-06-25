@@ -75,6 +75,14 @@ def offer_photo_path(
     return base
 
 
+def run_photo_path(run_id: int, filename: str, *, size: str = "thumb") -> str:
+    safe = _safe_filename(filename)
+    base = f"/runs/{run_id}/photo/{safe}"
+    if size == "full":
+        return f"{base}?size=full"
+    return base
+
+
 def resolve_photo_file(
     *,
     gallery: dict[str, Any] | None,
@@ -171,6 +179,54 @@ def render_jpeg(path: Path, *, max_edge: int) -> bytes:
     except OSError:
         log.warning("could not cache offer thumb %s", cache)
     return data
+
+
+def enrich_bundles_for_run(
+    run_id: int,
+    bundles: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach studio review-page photo URLs (no storefront token)."""
+    out: list[dict[str, Any]] = []
+    for bundle in bundles:
+        enriched = dict(bundle)
+        items_out = []
+        for item in bundle.get("items") or []:
+            row = dict(item)
+            photo = dict(row.get("photo") or {}) if isinstance(row.get("photo"), dict) else {}
+            fname = photo_filename(row.get("photo"))
+            if fname:
+                if not photo.get("filename"):
+                    photo["filename"] = fname
+                photo["thumb_url"] = run_photo_path(run_id, fname, size="thumb")
+                photo["full_url"] = run_photo_path(run_id, fname, size="full")
+            row["photo"] = photo
+            items_out.append(row)
+        enriched["items"] = items_out
+        slot_urls = []
+        for slot in bundle.get("photo_slots") or []:
+            if slot:
+                slot_urls.append(run_photo_path(run_id, str(slot), size="thumb"))
+        enriched["photo_slot_urls"] = slot_urls
+        first_thumb = (
+            items_out[0].get("photo", {}).get("thumb_url") if items_out else None
+        )
+        enriched["hero_thumb_url"] = first_thumb or (slot_urls[0] if slot_urls else None)
+        out.append(enriched)
+    return out
+
+
+def enrich_top_photos_for_run(
+    run_id: int,
+    photos: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for photo in photos:
+        row = dict(photo)
+        fname = row.get("filename")
+        if fname:
+            row["thumb_url"] = run_photo_path(run_id, str(fname), size="thumb")
+        out.append(row)
+    return out
 
 
 def enrich_bundles_for_offer(

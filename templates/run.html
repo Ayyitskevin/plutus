@@ -23,18 +23,34 @@
 
 {% for bundle in bundles %}
 <div class="card bundle{% if bundle.enabled is defined and not bundle.enabled %} disabled{% endif %}"{% if bundle.enabled is defined and not bundle.enabled %} style="opacity:.55"{% endif %}>
+  {% if bundle.hero_thumb_url %}
+  <div class="bundle-hero">
+    <img src="{{ bundle.hero_thumb_url }}" alt="{{ bundle.title }}" loading="lazy">
+  </div>
+  {% endif %}
   <h3>{{ bundle.title }}{% if bundle.enabled is defined and not bundle.enabled %} <span class="small">(hidden from clients)</span>{% endif %}</h3>
   <p class="pitch">{{ bundle.pitch }}</p>
   {% for item in bundle.get('items') or [] %}
   <div class="item">
-    <div>
+    {% if item.photo.thumb_url %}
+    <a class="item-thumb" href="{{ item.photo.full_url or item.photo.thumb_url }}" target="_blank" rel="noopener">
+      <img src="{{ item.photo.thumb_url }}" alt="{{ item.photo.filename }}" loading="lazy">
+    </a>
+    {% endif %}
+    <div class="item-body">
       <strong>{{ item.label }} {{ item.size }}</strong><br>
       <span style="color:var(--muted)">{{ item.photo.filename }} — {{ item.rationale }}</span>
     </div>
     <div class="money">{{ item.line_cents | money }}</div>
   </div>
   {% endfor %}
-  {% if bundle.get('photo_slots') %}
+  {% if bundle.get('photo_slot_urls') %}
+  <div class="slot-thumbs">
+    {% for url in bundle.photo_slot_urls %}
+    <img src="{{ url }}" alt="" loading="lazy">
+    {% endfor %}
+  </div>
+  {% elif bundle.get('photo_slots') %}
   <p style="font-size:.85rem;color:var(--muted);margin:.75rem 0 0">
     Suggested photos: {{ bundle.photo_slots | join(', ') }}
   </p>
@@ -44,12 +60,22 @@
 
 <div class="card">
   <h3 style="margin-top:0">Top-scoring frames</h3>
-  {% for p in top_photos %}
-  <span class="tag">
-    {{ p.filename }} ({{ '%.2f'|format(p.score) }})
-    {% if p.shot_type %} · {{ p.shot_type }}{% endif %}
-  </span>
-  {% endfor %}
+  {% if top_photos %}
+  <div class="slot-thumbs">
+    {% for p in top_photos %}
+    {% if p.thumb_url %}
+    <a href="{{ p.thumb_url }}" title="{{ p.filename }} ({{ '%.2f'|format(p.score) }})">
+      <img src="{{ p.thumb_url }}" alt="{{ p.filename }}" loading="lazy">
+    </a>
+    {% else %}
+    <span class="tag">
+      {{ p.filename }} ({{ '%.2f'|format(p.score) }})
+      {% if p.shot_type %} · {{ p.shot_type }}{% endif %}
+    </span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
   <p style="margin:1rem 0 0">
     <a class="btn" href="/runs/{{ run.id }}/json">JSON export</a>
     <a class="btn" href="/runs/{{ run.id }}/pitch.txt" style="margin-left:.5rem">Pitch text</a>
