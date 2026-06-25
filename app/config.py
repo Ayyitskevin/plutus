@@ -22,7 +22,7 @@ ARGUS_URL = os.environ.get("PLUTUS_ARGUS_URL", "").rstrip("/")
 ARGUS_TOKEN = os.environ.get("PLUTUS_ARGUS_TOKEN", "")
 ARGUS_TIMEOUT = int(os.environ.get("PLUTUS_ARGUS_TIMEOUT", "600"))
 ARGUS_AUTO_VISION = os.environ.get("PLUTUS_ARGUS_AUTO_VISION", "true").lower() == "true"
-ARGUS_ANALYZE_LIMIT = int(os.environ.get("PLUTUS_ARGUS_ANALYZE_LIMIT", "10"))
+ARGUS_ANALYZE_LIMIT = int(os.environ.get("PLUTUS_ARGUS_ANALYZE_LIMIT", "0"))
 
 API_TOKEN = os.environ.get("PLUTUS_API_TOKEN", "")
 
