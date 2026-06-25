@@ -22,6 +22,21 @@ def _check_mise() -> dict[str, str | bool]:
     return {"status": "ok" if configured else "disabled", "configured": configured}
 
 
+def _check_dionysus() -> dict[str, str | bool]:
+    from . import dionysus_client
+
+    st = dionysus_client.pitch_status()
+    if not st.get("configured"):
+        return {"status": "disabled", "configured": False}
+    reachable = bool(st.get("reachable"))
+    return {
+        "status": "ok" if reachable else "degraded",
+        "configured": True,
+        "reachable": reachable,
+        **{k: v for k, v in st.items() if k not in {"configured", "reachable"}},
+    }
+
+
 def _check_argus() -> dict[str, str | bool]:
     from . import argus_client
 
@@ -42,6 +57,7 @@ def build_health_report(*, worker: Any | None = None) -> dict:
         "database": _check_database(),
         "mise": _check_mise(),
         "argus": _check_argus(),
+        "dionysus": _check_dionysus(),
     }
 
     if checks["database"]["status"] == "error":

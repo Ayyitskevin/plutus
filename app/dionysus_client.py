@@ -28,9 +28,15 @@ def pitch_status() -> dict[str, Any]:
         return {"configured": False, "reachable": False}
     try:
         with httpx.Client(timeout=config.DIONYSUS_TIMEOUT) as client:
-            resp = client.get(f"{config.DIONYSUS_URL}/readiness", headers=_headers())
-        reachable = resp.status_code < 500
-        return {"configured": True, "reachable": reachable, "org": config.DIONYSUS_ORG_SLUG}
+            resp = client.get(f"{config.DIONYSUS_URL}/healthz", headers=_headers())
+        reachable = resp.status_code == 200
+        studio = resp.json().get("studio_mode") if reachable else None
+        return {
+            "configured": True,
+            "reachable": reachable,
+            "org": config.DIONYSUS_ORG_SLUG,
+            "studio_mode": studio,
+        }
     except httpx.HTTPError as exc:
         log.warning("Dionysus unreachable: %s", exc)
         return {"configured": True, "reachable": False, "detail": str(exc)}
