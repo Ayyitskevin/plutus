@@ -38,3 +38,5 @@ def test_analyze_mise_gallery(tmp_db, tmp_path):
     assert result["mise_gallery_id"] == gid
     assert result["run_id"] >= 1
     assert len(result["bundles"]) >= 1
+    assert f"/runs/{result['run_id']}" in result["review_url"]
+    assert result["pitch_url"].endswith("/pitch.txt")

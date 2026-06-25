@@ -126,30 +126,17 @@ def analyze_mise_gallery(
     )
     result["mise_gallery_id"] = mise_gallery_id
     result["argus_run_id"] = effective_argus
-    if config.MISE_AUTO_OFFER and tenant_id:
-        from . import sell
-
-        try:
-            offer = sell.publish_offer(
-                tenant_id,
-                int(result["run_id"]),
-                label=row.get("title") or f"Gallery {mise_gallery_id}",
-            )
-            result.update(
-                {
-                    k: offer[k]
-                    for k in ("offer_url", "offer_token", "store_slug")
-                    if k in offer
-                }
-            )
-        except sell.SellError as exc:
-            log.warning(
-                "mise auto-offer skipped for gallery %s run %s: %s",
-                mise_gallery_id,
-                result.get("run_id"),
-                exc,
-            )
+    result.update(studio_run_urls(int(result["run_id"])))
     return result
+
+
+def studio_run_urls(run_id: int) -> dict[str, str]:
+    """Links for Mise admin — bundle review UI and copy-paste client pitch."""
+    base = config.PUBLIC_URL.rstrip("/")
+    return {
+        "review_url": f"{base}/runs/{run_id}",
+        "pitch_url": f"{base}/runs/{run_id}/pitch.txt",
+    }
 
 
 def _resolve_argus_run_id(

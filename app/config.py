@@ -37,16 +37,18 @@ MISE_MEDIA_ROOT = (
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tif", ".tiff"}
 
-# SaaS mode (off by default — homelab single-tenant)
-SAAS_MODE = os.environ.get("PLUTUS_SAAS_MODE", "false").lower() == "true"
+# Studio mode — Mise admin upsell feature (SaaS and payments removed)
+SAAS_MODE = False
 
-# Homelab client storefront (share links + checkout on :8030)
-HOMELAB_STORE_ENABLED = os.environ.get("PLUTUS_HOMELAB_STORE_ENABLED", "true").lower() == "true"
+# Client storefront + Stripe checkout (disabled — use pitch.txt for client emails)
+HOMELAB_STORE_ENABLED = os.environ.get("PLUTUS_HOMELAB_STORE_ENABLED", "false").lower() == "true"
 HOMELAB_TENANT_ID = os.environ.get("PLUTUS_HOMELAB_TENANT_ID", "homelab")
 HOMELAB_STORE_SLUG = os.environ.get("PLUTUS_HOMELAB_STORE_SLUG", "studio")
 HOMELAB_STUDIO_NAME = os.environ.get("PLUTUS_HOMELAB_STUDIO_NAME", "Kevin Lee Studio")
 TENANT_KEY_PEPPER = os.environ.get("PLUTUS_TENANT_KEY_PEPPER") or API_TOKEN or "plutus-dev-pepper"
 SAAS_PUBLIC_URL = os.environ.get("PLUTUS_SAAS_PUBLIC_URL", f"http://{HOST}:{PORT}")
+# Base URL for review/pitch links returned to Mise admin
+PUBLIC_URL = os.environ.get("PLUTUS_PUBLIC_URL", SAAS_PUBLIC_URL).rstrip("/")
 
 # Self-service signup — closed by default. When SMTP is unconfigured,
 # verification silently no-ops and new tenants auto-activate UNVERIFIED, so a
@@ -68,8 +70,8 @@ TENANT_INVITE_TOKEN_HOURS = int(os.environ.get("PLUTUS_TENANT_INVITE_TOKEN_HOURS
 # Mise publish hook — default SaaS tenant when flow POSTs without tenant_id
 MISE_HOOK_TENANT_ID = os.environ.get("PLUTUS_MISE_HOOK_TENANT_ID") or None
 MISE_HOOK_TOKEN = os.environ.get("PLUTUS_MISE_HOOK_TOKEN") or None
-# After a Mise gallery recommend, mint a client offer link automatically (SaaS default on).
-MISE_AUTO_OFFER = os.environ.get("PLUTUS_MISE_AUTO_OFFER", "true").lower() == "true"
+# Deprecated — studio mode returns pitch + review URLs only (no client checkout links).
+MISE_AUTO_OFFER = False
 
 # Optional mnemosyne base for album-bundle cross-sell on client offer pages.
 MNEMOSYNE_URL = os.environ.get("PLUTUS_MNEMOSYNE_URL") or None

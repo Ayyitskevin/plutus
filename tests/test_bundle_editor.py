@@ -16,7 +16,7 @@ from app.storefront import create_share_link, resolve_offer
 def saas_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
-    monkeypatch.setattr(config, "SAAS_MODE", True)
+    monkeypatch.setattr(config, "SAAS_MODE", False)
     monkeypatch.setattr(config, "API_TOKEN", "admin-secret")
     monkeypatch.setattr(config, "TENANT_KEY_PEPPER", "pepper-secret")
     monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
@@ -103,12 +103,7 @@ def test_storefront_skips_disabled_bundles(saas_client):
 
 
 def test_ui_run_edit_flow(saas_client):
-    api_key, run_id = _studio_run()
-    saas_client.post(
-        "/ui/saas/login",
-        data={"api_token": api_key},
-        follow_redirects=False,
-    )
+    _, run_id = _studio_run()
     edit_page = saas_client.get(f"/runs/{run_id}/edit")
     assert edit_page.status_code == 200
     assert b"Edit bundles" in edit_page.content
@@ -121,7 +116,7 @@ def test_ui_run_edit_flow(saas_client):
         form[f"b{bi}_pitch"] = "Client-ready pitch"
         for ii, item in enumerate(bundle.get("items") or []):
             form[f"b{bi}_item{ii}_photo"] = item["photo"]["filename"]
-    r = saas_client.post("/ui/saas/app/run-edit", data=form, follow_redirects=False)
+    r = saas_client.post("/ui/homelab/run-edit", data=form, follow_redirects=False)
     assert r.status_code == 303
     assert f"/runs/{run_id}" in r.headers["location"]
     updated = db.get_run(run_id, tenant_id="studio")
