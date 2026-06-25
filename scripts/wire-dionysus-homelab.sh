@@ -4,9 +4,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIO_ROOT="${DIONYSUS_ROOT:-$HOME/ai-workspace/dionysus}"
 ENV_FILE="${PLUTUS_ENV_FILE:-$ROOT/.env.homelab}"
-TOKEN="${MISE_FLEET_TOKEN:-6e885f7b784c62b27e08be293da85108d13c1afbc0a02bfaa0bc97d9786fb57d}"
+DIO_ENV="${DIONYSUS_ENV_FILE:-$DIO_ROOT/.env}"
 ORG_SLUG="${PLUTUS_DIONYSUS_ORG_SLUG:-blue-plate}"
 DIO_URL="${PLUTUS_DIONYSUS_URL:-http://127.0.0.1:8450}"
+
+if [[ -f "$DIO_ENV" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$DIO_ENV"
+  set +a
+fi
+TOKEN="${PLUTUS_DIONYSUS_TOKEN:-${DIONYSUS_MISE_IMPORT_TOKEN:-${MISE_FLEET_TOKEN:-}}}"
+if [[ -z "$TOKEN" ]]; then
+  echo "Set DIONYSUS_MISE_IMPORT_TOKEN in $DIO_ENV" >&2
+  exit 1
+fi
 
 echo "==> Ensure Dionysus demo workspace"
 cd "$DIO_ROOT"
