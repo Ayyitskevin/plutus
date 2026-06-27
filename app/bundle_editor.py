@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from . import db, ingest, orders, recommend
+from . import db, ingest, recommend
 
 log = logging.getLogger("plutus.bundle_editor")
 
@@ -62,9 +62,10 @@ def _enabled_bundles(bundles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def estimated_total_cents(bundles: list[dict[str, Any]], tenant_id: str | None) -> int:
+    del tenant_id  # studio mode: catalog prices only, no tenant overrides
     total = 0
     for bundle in _enabled_bundles(bundles):
-        total += orders.bundle_total_cents(bundle, tenant_id or "")
+        total += sum(int(item.get("line_cents") or 0) for item in bundle.get("items") or [])
     return total
 
 

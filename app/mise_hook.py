@@ -4,7 +4,6 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from . import service
-from .metering import MeteringError
 
 
 def recommend_published_gallery(
@@ -25,8 +24,6 @@ def recommend_published_gallery(
             tenant_id=None,
             correlation_id=correlation_id,
         )
-    except MeteringError as exc:
-        raise HTTPException(status_code=402, detail=str(exc)) from exc
     except service.RecommendError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

@@ -104,16 +104,12 @@ def analyze_folder(
     tenant_id: str | None = None,
 ) -> dict[str, Any]:
     db.migrate()
-    if tenant_id:
-        from .metering import check_recommend_cap, record_recommend
-
-        check_recommend_cap(tenant_id)
     photos = ingest.photos_from_folder(folder, limit=limit)
     if argus_run_id:
         photos = ingest.enrich_from_argus_run(photos, argus_run_id)
 
     payload = recommend.recommend_bundles(photos, tenant_id=tenant_id)
-    result = _persist_run(
+    return _persist_run(
         name=name or folder.name,
         source=str(folder),
         photos=photos,
@@ -121,11 +117,6 @@ def analyze_folder(
         mise_gallery_id=mise_gallery_id,
         tenant_id=tenant_id,
     )
-    if tenant_id:
-        from .metering import record_recommend
-
-        record_recommend(tenant_id)
-    return result
 
 
 def analyze_mise_gallery(
@@ -184,148 +175,3 @@ def studio_run_urls(run_id: int) -> dict[str, str]:
         "offer_url": f"{base}/runs/{run_id}",
         "pitch_url": f"{base}/runs/{run_id}/pitch.txt",
     }
-
-
-def _resolve_argus_run_id(
-    folder: Path,
-    *,
-    tenant_id: str,
-    argus_run_id: int | None,
-    limit: int | None,
-) -> int | None:
-    if argus_run_id:
-        return argus_run_id
-    from . import argus_client
-
-    if not config.ARGUS_AUTO_VISION or not argus_client.is_enabled():
-        return None
-    try:
-        return argus_client.analyze_folder(
-            folder,
-            limit=limit,
-            client_id=f"plutus:{tenant_id}",
-        )
-    except argus_client.ArgusClientError as exc:
-        raise RecommendError(f"Argus vision failed: {exc}") from exc
-
-
-def enqueue_upload_batch_analyze(
-    batch_id: str,
-    *,
-    tenant_id: str,
-    argus_run_id: int | None = None,
-) -> dict[str, Any]:
-    from . import uploads
-
-    batch = uploads.get_batch(batch_id, tenant_id=tenant_id)
-    if not batch:
-        raise RecommendError("upload batch not found")
-    if batch["status"] in {"queued", "analyzing"}:
-        return {"batch_id": batch_id, "status": batch["status"], "queued": True}
-    if batch["status"] == "analyzed":
-        raise RecommendError("batch already analyzed — start a new upload")
-    if batch["photo_count"] <= 0:
-        raise uploads.UploadError("batch has no photos — upload files first")
-
-    db.update_upload_batch(
-        batch_id,
-        status="queued",
-        analyze_error=None,
-        argus_run_id=argus_run_id,
-    )
-    return {"batch_id": batch_id, "status": "queued", "queued": True}
-
-
-def process_upload_batch_analyze(
-    batch_id: str,
-    *,
-    tenant_id: str,
-    name: str | None = None,
-    argus_run_id: int | None = None,
-    limit: int | None = None,
-) -> dict[str, Any]:
-    from . import uploads
-
-    batch = uploads.get_batch(batch_id, tenant_id=tenant_id)
-    if not batch:
-        raise RecommendError("upload batch not found")
-    existing_run_id = batch.get("run_id")
-    if existing_run_id:
-        db.update_upload_batch(batch_id, status="analyzed", analyze_error=None)
-        return {
-            "run_id": int(existing_run_id),
-            "upload_batch_id": batch_id,
-            "argus_run_id": batch.get("argus_run_id"),
-            "already_analyzed": True,
-        }
-    folder = uploads.batch_folder(tenant_id, batch_id)
-    effective_argus = _resolve_argus_run_id(
-        folder,
-        tenant_id=tenant_id,
-        argus_run_id=argus_run_id,
-        limit=limit,
-    )
-    result = analyze_folder(
-        folder,
-        name=name or batch["name"],
-        argus_run_id=effective_argus,
-        limit=limit,
-        tenant_id=tenant_id,
-    )
-    db.update_upload_batch(
-        batch_id,
-        status="analyzed",
-        run_id=result["run_id"],
-        argus_run_id=effective_argus,
-        analyze_error=None,
-    )
-    result["upload_batch_id"] = batch_id
-    result["argus_run_id"] = effective_argus
-    return result
-
-
-def analyze_upload_batch(
-    batch_id: str,
-    *,
-    tenant_id: str,
-    name: str | None = None,
-    argus_run_id: int | None = None,
-    limit: int | None = None,
-    async_mode: bool | None = None,
-) -> dict[str, Any]:
-    use_async = config.UPLOAD_ASYNC_ANALYZE if async_mode is None else async_mode
-    if use_async and config.SAAS_MODE:
-        return enqueue_upload_batch_analyze(
-            batch_id,
-            tenant_id=tenant_id,
-            argus_run_id=argus_run_id,
-        )
-    return process_upload_batch_analyze(
-        batch_id,
-        tenant_id=tenant_id,
-        name=name,
-        argus_run_id=argus_run_id,
-        limit=limit,
-    )
-
-
-def upload_batch_status(batch_id: str, *, tenant_id: str) -> dict[str, Any]:
-    from . import uploads
-
-    batch = uploads.get_batch(batch_id, tenant_id=tenant_id)
-    if not batch:
-        raise RecommendError("upload batch not found")
-    out: dict[str, Any] = {
-        "batch_id": batch_id,
-        "status": batch["status"],
-        "photo_count": batch["photo_count"],
-        "run_id": batch.get("run_id"),
-        "argus_run_id": batch.get("argus_run_id"),
-        "analyze_error": batch.get("analyze_error"),
-        "done": batch["status"] == "analyzed",
-        "failed": batch["status"] == "failed",
-        "pending": batch["status"] in {"queued", "analyzing"},
-    }
-    if batch.get("run_id"):
-        out["run_url"] = f"/runs/{batch['run_id']}"
-    return out
