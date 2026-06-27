@@ -9,9 +9,6 @@ _started_at = time.time()
 _counters: dict[str, int] = {
     "recommend_folder": 0,
     "recommend_mise": 0,
-    "storefront_views": 0,
-    "orders_created": 0,
-    "orders_paid": 0,
     "rate_limit_exceeded": 0,
 }
 _gauges: dict[str, float] = {}
@@ -49,21 +46,7 @@ def snapshot(*, tenant_id: str | None = None) -> dict:
         return out
 
 
-def refresh_runtime_gauges() -> None:
-    from . import config, db
-
-    if not config.SAAS_MODE:
-        return
-    queued = db.list_upload_batches_by_status("queued", limit=500)
-    set_gauge("upload_batches_queued", float(len(queued)))
-    set_gauge(
-        "upload_batches_analyzing",
-        float(len(db.list_upload_batches_by_status("analyzing", limit=500))),
-    )
-
-
 def prometheus_text() -> str:
-    refresh_runtime_gauges()
     snap = snapshot()
     with _lock:
         gauges = dict(_gauges)

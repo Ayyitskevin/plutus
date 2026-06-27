@@ -68,11 +68,11 @@ If Plutus is kept, these are the contract with Mise (see `app/offer_schema.py`):
    regenerated from the gallery originals + Argus run.
 3. Decommission the Plutus service, UI, and tokens.
 
-## Still-present dead weight (slated for removal)
+## SaaS surface — removed
 
-These exist in the tree but are unregistered/unused in studio mode and are being
-deleted in follow-up PRs: SaaS modules (`saas*`, `signup*`, `tenants*`, `billing`,
-`metering`, `sell`, `storefront`, `orders`, `lab*`, `notifications`-on-paid),
-their templates/scripts, and the corresponding tables
-(`tenants`, `orders`, `storefront_tokens`, `stripe_webhook_events`, …). None hold
-authoritative state.
+The SaaS/money/identity modules, their templates, and their database tables have
+been deleted. `migrate()` now creates **only** `galleries` and
+`recommendation_runs` — the recommendation run cache. There is no `tenants`,
+`orders`, `storefront_tokens`, `stripe_webhook_events`, `upload_batches`, … table,
+and no signup/tenant/subscription/Stripe/storefront/order/lab code in the tree.
+Plutus holds no authoritative state.
