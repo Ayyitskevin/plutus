@@ -47,38 +47,8 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = [
-  "--ignore=tests/test_billing_stripe.py",
-  "--ignore=tests/test_billing_ui.py",
-  "--ignore=tests/test_client_order.py",
-  "--ignore=tests/test_client_paid_email.py",
-  "--ignore=tests/test_homelab_money.py",
-  "--ignore=tests/test_integrations.py",
-  "--ignore=tests/test_lab_notifications.py",
-  "--ignore=tests/test_lab_whcc.py",
-
-  "--ignore=tests/test_mise_saas_ui.py",
-  "--ignore=tests/test_mnemosyne_crosssell.py",
-  "--ignore=tests/test_money_path_hardening.py",
-  "--ignore=tests/test_order_ops.py",
-  "--ignore=tests/test_phase3.py",
-  "--ignore=tests/test_phase4.py",
-  "--ignore=tests/test_phase5.py",
-  "--ignore=tests/test_phase7.py",
-  "--ignore=tests/test_phase8.py",
-  "--ignore=tests/test_saas_sell.py",
-  "--ignore=tests/test_saas_startup_hardening.py",
-  "--ignore=tests/test_signup_verify.py",
-  "--ignore=tests/test_smtp_notifications.py",
-  "--ignore=tests/test_stripe_sandbox.py",
-  "--ignore=tests/test_tenant_invite.py",
-  "--ignore=tests/test_tenant_settings.py",
-  "--ignore=tests/test_tier10_hardening.py",
-  "--ignore=tests/test_tier13_hardening.py",
-  "--ignore=tests/test_trust_pages.py",
-  "--ignore=tests/test_upload_streaming.py",
-  "--ignore=tests/test_upload_worker_idempotent.py",
-]
+# No ignore-list: the SaaS/money test files were removed with their modules.
+# The full studio test suite runs in CI.
 
 [tool.ruff]
 line-length = 100

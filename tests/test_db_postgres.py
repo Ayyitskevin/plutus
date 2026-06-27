@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from app import config, db, tenants
+from app import config, db
 
 PG_URL = os.environ.get("PLUTUS_TEST_DATABASE_URL")
 
@@ -113,41 +113,6 @@ def test_postgres_ping_and_migrate(pg_env):
     assert db.ping()
 
 
-def test_postgres_storefront_token_json_safe(pg_env):
-    tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
-    gid = db.insert_gallery(name="G", source="/x", photo_count=1, tenant_id="pgco")
-    rid = db.insert_run(
-        gallery_id=gid,
-        engine="mock",
-        bundle_count=1,
-        estimated_total_cents=1200,
-        payload={"bundles": []},
-        tenant_id="pgco",
-    )
-    row = db.create_storefront_token(
-        token="tok123",
-        tenant_id="pgco",
-        run_id=rid,
-        label="demo",
-    )
-    import json
-
-    json.dumps(row)
-    assert row["created_at"]
-
-
-def test_postgres_increment_tenant_usage(pg_env):
-    tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
-    db.increment_tenant_usage("pgco", recommends=2, orders=1, revenue_cents=500)
-    usage = db.get_tenant_usage("pgco")
-    assert usage["recommends"] == 2
-    assert usage["orders"] == 1
-    assert usage["revenue_cents"] == 500
-    db.increment_tenant_usage("pgco", recommends=1)
-    usage = db.get_tenant_usage("pgco")
-    assert usage["recommends"] == 3
-
-
 def test_postgres_mise_gallery_idempotency_helpers(pg_env):
     """Exercise the PR3 idempotency lookups on real Postgres (conftest forces
     SQLite everywhere else, so this is the only Postgres coverage for them)."""
@@ -172,19 +137,17 @@ def test_postgres_mise_gallery_idempotency_helpers(pg_env):
     assert refreshed["photo_count"] == 8
 
 
-def test_postgres_tenant_and_run_roundtrip(pg_env):
-    tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
-    gid = db.insert_gallery(name="G", source="/x", photo_count=2, tenant_id="pgco")
+def test_postgres_run_json_roundtrip(pg_env):
+    gid = db.insert_gallery(name="G", source="/x", photo_count=2)
     rid = db.insert_run(
         gallery_id=gid,
         engine="mock",
         bundle_count=1,
         estimated_total_cents=1200,
         payload={"bundles": [{"title": "A", "items": []}], "gallery_theme": "wedding"},
-        tenant_id="pgco",
     )
-    row = db.get_run(rid, tenant_id="pgco")
+    row = db.get_run(rid)
     assert row is not None
     assert row["payload"]["gallery_theme"] == "wedding"
-    runs = db.list_runs(tenant_id="pgco", limit=5)
+    runs = db.list_runs(limit=5)
     assert runs[0]["gallery_theme"] == "wedding"

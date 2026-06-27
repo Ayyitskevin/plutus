@@ -83,46 +83,6 @@
   </p>
 </div>
 
-{% if tenant and (saas_mode or homelab_store) %}
-<div class="card">
-  <h3 style="margin-top:0">Client storefront link</h3>
-  {% if request.query_params.get('share_created') %}
-  <p class="status-ok">New offer link created — copy from list below.</p>
-  {% if request.query_params.get('offer_url') %}
-  <p class="small">Client URL: <a href="{{ request.query_params.get('offer_url') }}">{{ request.query_params.get('offer_url') }}</a>
-    <button type="button" class="secondary" style="margin-left:.5rem" onclick="navigator.clipboard.writeText('{{ request.query_params.get('offer_url') }}')">Copy</button>
-  </p>
-  {% endif %}
-  {% endif %}
-  {% if request.query_params.get('share_error') %}
-  <p class="err">{{ request.query_params.get('share_error') }}</p>
-  {% endif %}
-  <form method="post" action="{% if homelab_store %}/ui/homelab/share-link{% else %}/ui/saas/app/share-link{% endif %}">
-    {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
-    <input type="hidden" name="run_id" value="{{ run.id }}">
-    <label class="small">Label (optional) <input type="text" name="label" placeholder="Smith wedding"></label>
-    <button type="submit" style="margin-top:.5rem">Create offer link</button>
-  </form>
-  {% if share_links %}
-  <table style="margin-top:1rem">
-    <tr><th>Link</th><th>Label</th><th>Created</th></tr>
-    {% for link in share_links %}
-    <tr>
-      <td>
-        <a href="/store/{{ tenant.store_slug }}/offer/{{ link.token }}">/store/{{ tenant.store_slug }}/offer/{{ link.token }}</a>
-        {% if saas_mode or homelab_store %}
-        <br><span class="small">{{ public_base }}/store/{{ tenant.store_slug }}/offer/{{ link.token }}</span>
-        {% endif %}
-      </td>
-      <td>{{ link.label or '—' }}</td>
-      <td class="small">{{ link.created_at }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% endif %}
-</div>
-{% endif %}
-
 <div class="card">
   <h3 style="margin-top:0">Client pitch (copy-paste)</h3>
   <textarea id="pitch-text" rows="14" style="width:100%;font:inherit;padding:.65rem;border:1px solid var(--line);border-radius:6px">{{ pitch_text }}</textarea>
