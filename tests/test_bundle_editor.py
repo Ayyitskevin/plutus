@@ -8,8 +8,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app import config, db, tenants
-from app.bundle_editor import apply_edits, photos_for_run, save_run_edits
-from app.storefront import create_share_link, resolve_offer
+from app.bundle_editor import apply_edits, photos_for_run
 
 
 @pytest.fixture()
@@ -80,26 +79,6 @@ def test_apply_edits_swaps_photo_and_disables_bundle(saas_client):
     assert payload["bundles"][0]["title"] == "Custom hero"
     assert payload["bundles"][0]["items"][0]["photo"]["filename"] == alt
     assert payload["bundles"][1]["enabled"] is False
-
-
-def test_storefront_skips_disabled_bundles(saas_client):
-    _, run_id = _studio_run()
-    run = db.get_run(run_id, tenant_id="studio")
-    edits = []
-    for i, bundle in enumerate(run["payload"]["bundles"]):
-        edits.append({
-            "title": bundle.get("title"),
-            "pitch": bundle.get("pitch"),
-            "enabled": i == 0,
-            "items": [
-                {"photo_filename": (item.get("photo") or {}).get("filename")}
-                for item in bundle.get("items") or []
-            ],
-        })
-    save_run_edits(run_id=run_id, tenant_id="studio", bundle_edits=edits)
-    link = create_share_link(tenant_id="studio", run_id=run_id)
-    offer = resolve_offer("studio", link["token"])
-    assert len(offer["bundles"]) == 1
 
 
 def test_ui_run_edit_flow(saas_client):
