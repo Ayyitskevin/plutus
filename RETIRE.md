@@ -49,24 +49,49 @@ If Plutus is kept, these are the contract with Mise (see `app/offer_schema.py`):
   `PLUTUS_SERVICE_TOKENS`) is part of the contract — keep it in sync with Mise's
   `MISE_PLUTUS_TOKEN`.
 
-## What is already turned off in studio mode
+## Single-operator worker — what's gone
 
-- `SAAS_MODE = False` (hardcoded). SaaS portal / signup / billing / webhooks
-  routers are **not registered**.
-- `PLUTUS_HOMELAB_STORE_ENABLED=false` by default.
-- The reachable homelab **storefront / order / lab-fulfillment routes have been
-  removed** — Plutus no longer exposes any client checkout, order, or fulfillment
-  surface.
+Plutus is one operator, one config, with Mise as the caller. The multi-tenant
+standalone surface has been removed: no signup / subscription / billing / Stripe /
+storefront / per-tenant UI routes, modules, tables, scripts, ops units, or config.
+There is no client checkout, order, or fulfillment surface. Auth is a single
+service-token register; the DB is a recommendation run cache (plus the disposable
+callback outbox). Configuration is the worker essentials only — DB, Mise, Argus,
+Dionysus, tokens, public URL, optional callback.
 
 ## How to retire Plutus entirely
 
 1. Point Mise's recommend call away from Plutus (or stop calling it). Publishing
    in Mise must already tolerate a Plutus failure as a swallowed status — a Plutus
    outage never blocks Mise's publish path.
-2. Drop the Plutus database. Nothing needs migrating: accepted offers and their
+2. Drain the callback outbox first if the push is enabled:
+   `POST /admin/callbacks/redeliver` (bearer) until `/healthz`
+   `callback_deadletter_pending` is 0, so no completed offer is stranded.
+3. Drop the Plutus database. Nothing needs migrating: accepted offers and their
    invoice lines already live in Mise, and any past recommendation can be
    regenerated from the gallery originals + Argus run.
-3. Decommission the Plutus service, UI, and tokens.
+4. Decommission the Plutus service, UI, and tokens.
+
+## Rollback (re-enable after a retirement or bad deploy)
+
+Plutus is stateless, so rollback is low-risk:
+
+1. **Redeploy** the previous Plutus revision (or roll the image/tag back) and start
+   the service. `migrate()` is idempotent — it recreates `galleries`,
+   `recommendation_runs`, and `callback_deadletter` if the DB was dropped; no
+   restore is required because outputs are reproducible.
+2. **Re-point Mise**: set `MISE_PLUTUS_URL` back to this worker and confirm
+   `PLUTUS_API_TOKEN` == Mise's `MISE_PLUTUS_TOKEN` (a rotated secret can also be
+   added to `PLUTUS_SERVICE_TOKENS` to avoid a flip-the-switch 401).
+3. **Verify** `GET /healthz` reports `status: ok`, the expected `version` /
+   `offer_schema_version`, and `mise_configured: true`.
+4. **Re-recommend** a known gallery (`POST /recommend/mise-gallery`) and confirm a
+   valid offer; idempotency means a re-run refreshes the same `run_id` rather than
+   duplicating. If the callback push is on, drain any backlog with
+   `POST /admin/callbacks/redeliver`.
+
+No data migration or backup restore is needed at any step — the only authoritative
+record (accepted offers → invoice lines) lives in Mise.
 
 ## SaaS surface — removed
 

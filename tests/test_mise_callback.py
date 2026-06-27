@@ -213,3 +213,24 @@ def test_recommend_survives_callback_dead_letter(studio_client, tmp_path, monkey
             )
     assert r.status_code == 200  # recommend never crashes on callback failure
     assert r.json()["callback"]["status"] == "dead_lettered"
+
+
+def test_callback_payload_validates_against_offer_schema(studio_client, tmp_path):
+    from app import offer_schema
+
+    calls: list = []
+    ok_client = _scripted_client(calls, statuses=[200])
+    with patch("app.mise_client.get_gallery", return_value=_gallery(tmp_path, 11)):
+        with patch("app.mise_client.is_enabled", return_value=True):
+            with patch.object(mise_callback.httpx, "Client", ok_client):
+                r = studio_client.post(
+                    "/recommend/mise-gallery",
+                    data={"mise_gallery_id": 11, "correlation_id": "c9"},
+                    headers={"Authorization": "Bearer studio-admin"},
+                )
+    assert r.status_code == 200
+    # The exact JSON bytes Plutus PUTs on the wire must satisfy the offer contract.
+    body = calls[0]["json"]
+    assert offer_schema.validate_offer(body) == [], offer_schema.validate_offer(body)
+    assert body["idempotency_key"] == "plutus-offer-11-" + str(r.json()["run_id"])
+    assert body["correlation_id"] == "c9"

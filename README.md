@@ -7,7 +7,9 @@ vision signals) into client-ready print bundles — canvas, fine art prints, alb
 and gift sets with SKU pairings and price estimates. You review bundles in the Plutus UI
 and copy `pitch.txt` into a client email.
 
-**Studio feature only** — no SaaS signup, Stripe checkout, or client payment flows.
+**Single-operator worker** — one operator, one config, Mise is the caller. No SaaS
+signup, subscriptions, Stripe checkout, storefront, or per-tenant UI. To turn it off
+or roll back safely, see [RETIRE.md](RETIRE.md).
 
 Part of the Kevin Lee photography suite alongside [mise](https://github.com/Ayyitskevin/mise),
 [argus](https://github.com/Ayyitskevin/argus), [mnemosyne](https://github.com/Ayyitskevin/mnemosyne),

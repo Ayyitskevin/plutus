@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -9,6 +10,13 @@ from .. import config, db, health, metrics, mise_callback, mise_client, offer_sc
 
 log = logging.getLogger("plutus")
 router = APIRouter()
+
+
+def _service_version() -> str:
+    try:
+        return version("plutus")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def _deadletter_pending() -> int | None:
@@ -24,6 +32,7 @@ def healthz() -> dict:
     report = health.build_health_report()
     report.update({
         "service": "plutus",
+        "version": _service_version(),
         "engine": "mock",
         # Provenance/version surface so Mise can detect contract or engine drift.
         "model": recommend.MODEL_VERSION,
