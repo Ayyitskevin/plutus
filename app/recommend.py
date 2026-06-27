@@ -1,12 +1,18 @@
 """Recommendation engine — vision-aware bundle builder."""
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from . import catalog
 from .catalog import PRODUCTS, Product
 
 Photo = dict[str, Any]
+
+# Provenance reported on every run (Mise persists this to its ai_runs ledger).
+# The recommend step is a deterministic rules engine — no paid model call — so its
+# own cost is 0.0. Vision signals come from Argus, which meters its own cost.
+MODEL_VERSION = "plutus-rules-v1"
 
 DETAIL_SHOT_TYPES = frozenset(
     {"detail", "macro", "ingredient", "close_up", "closeup", "texture", "flat_lay"}
@@ -174,10 +180,56 @@ def _wall_pitch(theme: str, hero: Photo) -> str:
     return "Lead with your strongest hero — ideal for dining room or lobby."
 
 
+def _contract_line_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Project an internal catalog line into the Mise contract line_item shape.
+
+    Superset of the contract minimum (`label`/`qty`/`unit_cents`): we also carry the
+    catalog `sku` so Mise can map an accepted line to an invoice-line product.
+    """
+    qty = int(item.get("qty") or item.get("quantity") or 1)
+    unit_cents = int(item.get("unit_cents") or 0)
+    return {
+        "sku": item.get("sku"),
+        "label": item.get("label") or item.get("sku") or "",
+        "qty": qty,
+        "unit_cents": unit_cents,
+    }
+
+
+def _attach_contract_fields(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Add stable bundle `sku` + `line_items` so accepted offers link to invoices.
+
+    `bundle["id"]` is a stable bundle-kind id (wall-hero, editor-picks, …) reused as
+    the contract `sku`. Existing keys (`id`/`title`/`items`/`line_cents`) are kept as
+    backward-compatible aliases for the current Mise consumer and the Plutus UI/pitch.
+    """
+    line_items = [_contract_line_item(it) for it in bundle.get("items") or []]
+    bundle["sku"] = bundle.get("id")
+    bundle["label"] = bundle.get("title")
+    bundle["line_items"] = line_items
+    bundle["estimated_cents"] = sum(li["qty"] * li["unit_cents"] for li in line_items)
+    return bundle
+
+
+def _provenance(start: float) -> dict[str, Any]:
+    return {
+        "model": MODEL_VERSION,
+        "latency_ms": int((time.perf_counter() - start) * 1000),
+        "cost_usd": 0.0,
+    }
+
+
 def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> dict[str, Any]:
     """Return client-ready upsell bundles for a gallery."""
+    started = time.perf_counter()
     if not photos:
-        return {"bundles": [], "estimated_total_cents": 0, "photo_count": 0, "engine": "mock"}
+        return {
+            "bundles": [],
+            "estimated_total_cents": 0,
+            "photo_count": 0,
+            "engine": "mock",
+            **_provenance(started),
+        }
 
     theme = _gallery_theme(photos)
     vision = _has_vision_signals(photos)
@@ -265,11 +317,10 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
 
     bundles = [b for b in bundles if b.get("items")]
 
-    total = sum(
-        item["line_cents"]
-        for bundle in bundles
-        for item in bundle.get("items") or []
-    )
+    for bundle in bundles:
+        _attach_contract_fields(bundle)
+
+    total = sum(bundle["estimated_cents"] for bundle in bundles)
 
     return {
         "engine": "vision" if vision else "mock",
@@ -285,4 +336,5 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
             }
             for p in top[:6]
         ],
+        **_provenance(started),
     }

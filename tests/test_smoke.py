@@ -48,6 +48,7 @@ def test_studio_run_urls(monkeypatch):
 
     assert studio_run_urls(5) == {
         "review_url": "http://plutus.test/runs/5",
+        "offer_url": "http://plutus.test/runs/5",
         "pitch_url": "http://plutus.test/runs/5/pitch.txt",
     }
 
