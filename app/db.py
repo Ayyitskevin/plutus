@@ -484,11 +484,15 @@ def get_gallery_by_mise_id(
 
 
 def run_id_for_gallery(gallery_id: int, *, tenant_id: str | None = None) -> int | None:
-    """Canonical (earliest) recommendation run id for a gallery, or None."""
+    """Canonical (earliest) recommendation run id for a gallery, or None.
+
+    Scopes by tenant the same way get_gallery_by_mise_id does, so the studio
+    (tenant_id IS NULL) anchor never reaches across to a tenant-scoped run.
+    """
     with connection() as con:
         if tenant_id is None:
             row = con.execute(
-                "SELECT id FROM recommendation_runs WHERE gallery_id=? "
+                "SELECT id FROM recommendation_runs WHERE gallery_id=? AND tenant_id IS NULL "
                 "ORDER BY id ASC LIMIT 1",
                 (gallery_id,),
             ).fetchone()
