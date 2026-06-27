@@ -38,6 +38,17 @@ SERVICE_TOKENS = [
 MISE_URL = os.environ.get("PLUTUS_MISE_URL", "").rstrip("/")
 MISE_API_TOKEN = os.environ.get("PLUTUS_MISE_API_TOKEN", "")
 MISE_TIMEOUT = int(os.environ.get("PLUTUS_MISE_TIMEOUT", "10"))
+
+# Optional async push of the finished offer back to Mise. Default OFF — the
+# synchronous /recommend/mise-gallery response stays the live contract. When
+# enabled, results POST to {MISE_CALLBACK_URL or MISE_URL}/api/plutus/callback
+# ?gallery_id=<id> with a bearer service token ({MISE_CALLBACK_TOKEN or
+# MISE_API_TOKEN}); failures are swallowed and recorded, never crashing recommend.
+MISE_CALLBACK_ENABLED = (
+    os.environ.get("PLUTUS_MISE_CALLBACK_ENABLED", "false").lower() == "true"
+)
+MISE_CALLBACK_URL = os.environ.get("PLUTUS_MISE_CALLBACK_URL", "").rstrip("/") or None
+MISE_CALLBACK_TOKEN = os.environ.get("PLUTUS_MISE_CALLBACK_TOKEN") or None
 MISE_MEDIA_ROOT = (
     Path(os.environ.get("PLUTUS_MISE_MEDIA_ROOT", ""))
     if os.environ.get("PLUTUS_MISE_MEDIA_ROOT")
