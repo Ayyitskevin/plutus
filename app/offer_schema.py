@@ -110,3 +110,62 @@ def validate_offer(payload: Any) -> list[str]:
 
 def is_valid_offer(payload: Any) -> bool:
     return not validate_offer(payload)
+
+
+# Canonical wire shape Mise validates and records. Keep in sync with validate_offer.
+OFFER_KEYS = (
+    "run_id",
+    "estimated_total_cents",
+    "offer_url",
+    "pitch_url",
+    "model",
+    "latency_ms",
+    "cost_usd",
+    "bundles",
+)
+BUNDLE_KEYS = ("sku", "label", "estimated_cents", "line_items")
+LINE_ITEM_KEYS = ("sku", "label", "qty", "unit_cents")
+
+
+def to_mise_offer(result: dict[str, Any]) -> dict[str, Any]:
+    """Project a recommend result down to the strict Mise offer contract.
+
+    The live /recommend/mise-gallery response is a superset (it also carries UI
+    fields like review_url/top_photos/per-bundle title). This is the canonical,
+    extras-free view Mise validates and records — the single source of truth for
+    the wire shape.
+
+    Invoice-line linkage (the whole point): the per-bundle ``sku`` identifies the
+    accepted bundle, and each ``line_items[].sku`` is the catalog product key that
+    maps 1:1 to an invoice line a human later creates in Mise. ``correlation_id``
+    is echoed when present. Every ``*_cents`` value is a PROPOSAL only.
+    """
+    offer: dict[str, Any] = {
+        "run_id": result.get("run_id"),
+        "estimated_total_cents": int(result.get("estimated_total_cents") or 0),
+        "offer_url": result.get("offer_url") or result.get("review_url"),
+        "pitch_url": result.get("pitch_url"),
+        "model": result.get("model"),
+        "latency_ms": result.get("latency_ms"),
+        "cost_usd": result.get("cost_usd"),
+        "bundles": [
+            {
+                "sku": b.get("sku") or b.get("id"),
+                "label": b.get("label") or b.get("title"),
+                "estimated_cents": int(b.get("estimated_cents") or 0),
+                "line_items": [
+                    {
+                        "sku": li.get("sku"),
+                        "label": li.get("label"),
+                        "qty": int(li.get("qty") or 0),
+                        "unit_cents": int(li.get("unit_cents") or 0),
+                    }
+                    for li in (b.get("line_items") or [])
+                ],
+            }
+            for b in (result.get("bundles") or [])
+        ],
+    }
+    if result.get("correlation_id"):
+        offer["correlation_id"] = result["correlation_id"]
+    return offer
