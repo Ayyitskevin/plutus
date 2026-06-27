@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, rate_limit
+from . import config, db
 from .routes import register_routes
 
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +43,6 @@ if config.CORS_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-app.middleware("http")(rate_limit.rate_limit_middleware)
 app.mount("/static", StaticFiles(directory=str(_ROOT / "static")), name="static")
 
 register_routes(app)

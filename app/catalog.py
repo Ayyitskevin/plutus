@@ -50,40 +50,11 @@ def bundles_include_album(bundles: list) -> bool:
     return False
 
 
-def unit_cents_for(sku: str, tenant_id: str | None = None) -> int:
-    del tenant_id  # studio mode: fixed catalog prices, no tenant overrides
+def unit_cents_for(sku: str) -> int:
     product = get_product(sku)
     return product.unit_cents if product else 0
 
 
-def label_for(sku: str, tenant_id: str | None = None) -> str:
-    del tenant_id
+def label_for(sku: str) -> str:
     product = get_product(sku)
     return product.label if product else sku
-
-
-def is_active(sku: str, tenant_id: str | None = None) -> bool:
-    del tenant_id
-    return get_product(sku) is not None
-
-
-def list_catalog(tenant_id: str | None = None) -> list[dict]:
-    """Base print/album catalog (studio mode — no tenant overrides)."""
-    del tenant_id
-    rows = []
-    for product in PRODUCTS:
-        rows.append(
-            {
-                "sku": product.sku,
-                "label": product.label,
-                "base_label": product.label,
-                "category": product.category,
-                "size": product.size,
-                "unit_cents": product.unit_cents,
-                "base_cents": product.unit_cents,
-                "active": True,
-                "has_override": False,
-                "notes": product.notes,
-            }
-        )
-    return rows

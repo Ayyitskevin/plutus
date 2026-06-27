@@ -9,19 +9,15 @@ from . import service
 def recommend_published_gallery(
     *,
     mise_gallery_id: int,
-    tenant_id: str | None = None,
     argus_run_id: int | None = None,
     limit: int | None = None,
-    from_webhook: bool = False,
     correlation_id: str | None = None,
 ) -> dict:
-    del tenant_id, from_webhook  # studio mode: single operator, no tenant routing
     try:
         return service.analyze_mise_gallery(
             mise_gallery_id,
             limit=limit,
             argus_run_id=argus_run_id,
-            tenant_id=None,
             correlation_id=correlation_id,
         )
     except service.RecommendError as exc:

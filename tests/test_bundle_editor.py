@@ -16,7 +16,6 @@ def studio_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "API_TOKEN", "")
-    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
     monkeypatch.setattr(config, "PUBLIC_URL", "http://plutus.test")
     db.migrate()
     from app.main import app
@@ -49,7 +48,6 @@ def test_apply_edits_swaps_photo_and_disables_bundle(studio_client):
     alt = photos[1]["filename"]
     payload = apply_edits(
         run=run,
-        tenant_id=None,
         bundle_edits=[
             {
                 "title": "Custom hero",

@@ -14,12 +14,10 @@ from app import config, db, service_tokens
 def studio_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
-    monkeypatch.setattr(config, "SAAS_MODE", False)
     monkeypatch.setattr(config, "API_TOKEN", "studio-admin")
     monkeypatch.setattr(config, "MISE_HOOK_TOKEN", None)
     monkeypatch.setattr(config, "SERVICE_TOKENS", [])
     monkeypatch.setattr(config, "PUBLIC_URL", "http://plutus.test")
-    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
     monkeypatch.setattr(config, "MISE_MEDIA_ROOT", tmp_path / "mise-media")
     db.migrate()
     from app.main import app

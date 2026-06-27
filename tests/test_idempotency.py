@@ -101,7 +101,6 @@ def test_correlation_id_is_echoed(tmp_db, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "API_TOKEN", "studio-admin")
     monkeypatch.setattr(config, "MISE_HOOK_TOKEN", None)
     monkeypatch.setattr(config, "SERVICE_TOKENS", [])
-    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
     from app.main import app
 
     client = TestClient(app)

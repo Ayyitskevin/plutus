@@ -36,14 +36,13 @@ def _persist_run(
     photos: list[dict[str, Any]],
     payload: dict[str, Any],
     mise_gallery_id: int | None = None,
-    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     bundle_count = len(payload.get("bundles") or [])
     total_cents = int(payload.get("estimated_total_cents") or 0)
     engine = payload.get("engine", "mock")
 
     existing = (
-        db.get_gallery_by_mise_id(mise_gallery_id, tenant_id=tenant_id)
+        db.get_gallery_by_mise_id(mise_gallery_id)
         if mise_gallery_id is not None
         else None
     )
@@ -53,11 +52,10 @@ def _persist_run(
         # creating a second offer or duplicate bundles. run_id stays stable.
         gallery_id = int(existing["id"])
         db.update_gallery(gallery_id, name=name, photo_count=len(photos))
-        run_id = db.run_id_for_gallery(gallery_id, tenant_id=tenant_id)
+        run_id = db.run_id_for_gallery(gallery_id)
         if run_id is not None:
             db.update_run(
                 run_id,
-                tenant_id=tenant_id,
                 bundle_count=bundle_count,
                 estimated_total_cents=total_cents,
                 payload=payload,
@@ -69,7 +67,6 @@ def _persist_run(
                 bundle_count=bundle_count,
                 estimated_total_cents=total_cents,
                 payload=payload,
-                tenant_id=tenant_id,
             )
     else:
         gallery_id = db.insert_gallery(
@@ -77,7 +74,6 @@ def _persist_run(
             source=source,
             photo_count=len(photos),
             mise_gallery_id=mise_gallery_id,
-            tenant_id=tenant_id,
         )
         run_id = db.insert_run(
             gallery_id=gallery_id,
@@ -85,7 +81,6 @@ def _persist_run(
             bundle_count=bundle_count,
             estimated_total_cents=total_cents,
             payload=payload,
-            tenant_id=tenant_id,
         )
     return {
         "run_id": run_id,
@@ -101,21 +96,19 @@ def analyze_folder(
     argus_run_id: int | None = None,
     limit: int | None = None,
     mise_gallery_id: int | None = None,
-    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     db.migrate()
     photos = ingest.photos_from_folder(folder, limit=limit)
     if argus_run_id:
         photos = ingest.enrich_from_argus_run(photos, argus_run_id)
 
-    payload = recommend.recommend_bundles(photos, tenant_id=tenant_id)
+    payload = recommend.recommend_bundles(photos)
     return _persist_run(
         name=name or folder.name,
         source=str(folder),
         photos=photos,
         payload=payload,
         mise_gallery_id=mise_gallery_id,
-        tenant_id=tenant_id,
     )
 
 
@@ -124,7 +117,6 @@ def analyze_mise_gallery(
     *,
     limit: int | None = None,
     argus_run_id: int | None = None,
-    tenant_id: str | None = None,
     correlation_id: str | None = None,
 ) -> dict[str, Any]:
     db.migrate()
@@ -148,7 +140,6 @@ def analyze_mise_gallery(
         argus_run_id=int(effective_argus) if effective_argus else None,
         limit=limit,
         mise_gallery_id=mise_gallery_id,
-        tenant_id=tenant_id,
     )
     result["mise_gallery_id"] = mise_gallery_id
     result["argus_run_id"] = effective_argus

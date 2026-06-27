@@ -12,7 +12,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "API_TOKEN", "studio-admin")
-    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
     db.migrate()
     from app.main import app
 

@@ -5,7 +5,6 @@ primary_region = "iad"
   dockerfile = "Dockerfile"
 
 [env]
-  PLUTUS_SAAS_MODE = "true"
   PLUTUS_HOST = "0.0.0.0"
   PLUTUS_PORT = "8031"
   PLUTUS_DATA_DIR = "/data"

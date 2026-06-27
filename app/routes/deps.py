@@ -25,8 +25,6 @@ def ui_context(request: Request | None = None, **extra) -> dict:
 
     del request  # studio mode has no UI session or CSRF token
     ctx = {
-        "saas_mode": False,
-        "homelab_store": False,
         "csrf_token": "",
         "argus": argus_client.vision_status() if argus_client.is_enabled() else None,
         "argus_auto_vision": config.ARGUS_AUTO_VISION,

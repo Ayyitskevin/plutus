@@ -9,7 +9,6 @@ from app import config, db
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
-    monkeypatch.setattr(config, "SAAS_MODE", False)
     monkeypatch.setattr(config, "API_TOKEN", "")
     db.migrate()
     from app.main import app
