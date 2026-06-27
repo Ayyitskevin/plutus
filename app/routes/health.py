@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
-from .. import config, health, metrics, mise_client
+from .. import config, health, metrics, mise_client, offer_schema, recommend
 
 log = logging.getLogger("plutus")
 router = APIRouter()
@@ -17,6 +17,9 @@ def healthz() -> dict:
     report.update({
         "service": "plutus",
         "engine": "mock",
+        # Provenance/version surface so Mise can detect contract or engine drift.
+        "model": recommend.MODEL_VERSION,
+        "offer_schema_version": offer_schema.OFFER_SCHEMA_VERSION,
         "mise_configured": mise_client.is_enabled(),
         "auth_enabled": bool(config.API_TOKEN),
     })
