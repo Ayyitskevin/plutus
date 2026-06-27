@@ -36,15 +36,20 @@ Mise**, so an accepted offer can be attributed to real upsell revenue.
    (Mise persists these to its ai_runs ledger / cost report).
 3. **Callback contract.** Echo any `correlation_id` Mise sends. Results may also
    POST to Mise at `/api/plutus/callback?gallery_id=<id>` with a bearer service
-   token (config-gated, default OFF — `mise_client.post_offer_callback`). A
-   callback for an unknown subject is a no-op, never an error.
+   token (config-gated, default OFF — `app/mise_callback.py`). Delivery is
+   hardened: a stable `Idempotency-Key` per `(gallery_id, run_id)` so re-delivery
+   never duplicates; a 401 refreshes the token from `.env` and retries once;
+   transient failures retry with backoff, then dead-letter to a local re-deliverable
+   outbox. A callback for an unknown subject is a no-op, never an error, and a
+   callback failure never crashes the recommend path.
 4. **Idempotency.** **One stable offer per gallery** — a retry/re-run refreshes
    the same `run_id` in place; it never creates a second offer or duplicate
    bundles.
-5. **Stateless / retire-ready.** The DB is only a recommendation run cache
-   (`galleries` + `recommendation_runs`); outputs are reproducible from the Mise
-   gallery + Argus run. Plutus's DB/UI/auth could be retired with no data loss.
-   See `RETIRE.md`.
+5. **Stateless / retire-ready.** The DB is a recommendation run cache
+   (`galleries` + `recommendation_runs`) plus `callback_deadletter` (an operational,
+   re-deliverable callback outbox — not business state); outputs are reproducible
+   from the Mise gallery + Argus run. Plutus's DB/UI/auth could be retired with no
+   data loss. See `RETIRE.md`.
 6. **Auth robustness.** Inbound auth is one constant-time **service-token
    register** (`app/service_tokens.py`): `PLUTUS_API_TOKEN`,
    `PLUTUS_MISE_HOOK_TOKEN`, and any `PLUTUS_SERVICE_TOKENS` rotation tokens are

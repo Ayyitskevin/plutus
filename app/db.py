@@ -45,6 +45,22 @@ CREATE TABLE IF NOT EXISTS recommendation_runs (
     tenant_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Operational outbox for offer callbacks that exhausted retries / hard-failed
+-- auth. NOT business state: keyed by a stable idempotency key, re-deliverable,
+-- and disposable (each row's offer is reproducible from its recommendation run).
+CREATE TABLE IF NOT EXISTS callback_deadletter (
+    idempotency_key TEXT PRIMARY KEY,
+    gallery_id INTEGER NOT NULL,
+    run_id INTEGER,
+    payload_json TEXT NOT NULL,
+    correlation_id TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_status TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -318,3 +334,78 @@ def list_runs(*, limit: int = 20, tenant_id: str | None = None) -> list[dict[str
                 (limit,),
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --- Callback dead-letter outbox (operational; re-deliverable) ---
+
+
+def upsert_callback_deadletter(
+    *,
+    idempotency_key: str,
+    gallery_id: int,
+    run_id: int | None,
+    payload: dict[str, Any],
+    correlation_id: str | None,
+    attempts: int,
+    last_status: str | None,
+    last_error: str | None,
+) -> None:
+    """Record a failed callback delivery, keyed by idempotency key (no duplicates)."""
+    with connection() as con:
+        con.execute("DELETE FROM callback_deadletter WHERE idempotency_key=?", (idempotency_key,))
+        con.execute(
+            """INSERT INTO callback_deadletter
+               (idempotency_key, gallery_id, run_id, payload_json, correlation_id,
+                attempts, last_status, last_error)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (
+                idempotency_key,
+                gallery_id,
+                run_id,
+                json.dumps(payload),
+                correlation_id,
+                attempts,
+                last_status,
+                last_error,
+            ),
+        )
+
+
+def delete_callback_deadletter(idempotency_key: str) -> None:
+    with connection() as con:
+        con.execute(
+            "DELETE FROM callback_deadletter WHERE idempotency_key=?", (idempotency_key,)
+        )
+
+
+def get_callback_deadletter(idempotency_key: str) -> dict[str, Any] | None:
+    with connection() as con:
+        row = con.execute(
+            "SELECT * FROM callback_deadletter WHERE idempotency_key=?", (idempotency_key,)
+        ).fetchone()
+    if not row:
+        return None
+    out = dict(row)
+    out["payload"] = json.loads(out["payload_json"])
+    return out
+
+
+def list_callback_deadletter(*, limit: int = 100) -> list[dict[str, Any]]:
+    with connection() as con:
+        rows = con.execute(
+            "SELECT * FROM callback_deadletter ORDER BY created_at ASC, idempotency_key ASC "
+            "LIMIT ?",
+            (limit,),
+        ).fetchall()
+    out = []
+    for row in rows:
+        item = dict(row)
+        item["payload"] = json.loads(item["payload_json"])
+        out.append(item)
+    return out
+
+
+def count_callback_deadletter() -> int:
+    with connection() as con:
+        row = con.execute("SELECT COUNT(*) AS n FROM callback_deadletter").fetchone()
+    return int(row["n"])

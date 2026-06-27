@@ -22,7 +22,8 @@ def pg_env(tmp_path, monkeypatch):
     yield
     with db.connection() as con:
         con.execute(
-            "TRUNCATE recommendation_runs, galleries RESTART IDENTITY CASCADE"
+            "TRUNCATE callback_deadletter, recommendation_runs, galleries "
+            "RESTART IDENTITY CASCADE"
         )
 
 

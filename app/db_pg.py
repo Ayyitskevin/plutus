@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS recommendation_runs (
     tenant_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS callback_deadletter (
+    idempotency_key TEXT PRIMARY KEY,
+    gallery_id INTEGER NOT NULL,
+    run_id INTEGER,
+    payload_json TEXT NOT NULL,
+    correlation_id TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_status TEXT,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
