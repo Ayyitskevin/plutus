@@ -9,7 +9,7 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from . import config, storage
+from . import config
 
 log = logging.getLogger("plutus.gallery_media")
 
@@ -109,15 +109,8 @@ def resolve_photo_file(
         # to let it point at a file whose name differs from the token-validated
         # filename — so a tampered or buggy payload can never serve an arbitrary
         # file under the cover of this offer (defense-in-depth for H1).
-        if path_hint.startswith("s3://"):
-            without = path_hint.removeprefix("s3://")
-            _bucket, _, key = without.partition("/")
-            if Path(key).name == safe:
-                digest = hashlib.sha256(path_hint.encode()).hexdigest()[:16]
-                cache = config.DATA_DIR / "offer_cache" / digest
-                cache.mkdir(parents=True, exist_ok=True)
-                candidates.append(storage._materialize_s3_uri(path_hint, cache))
-        elif Path(path_hint).name == safe:
+        # Studio galleries are local (MISE_MEDIA_ROOT / gallery source); no S3.
+        if Path(path_hint).name == safe:
             candidates.append(Path(path_hint))
 
     if gallery:

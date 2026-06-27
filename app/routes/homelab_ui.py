@@ -12,14 +12,7 @@ from fastapi.responses import (
     Response,
 )
 
-from .. import (
-    config,
-    db,
-    homelab,
-    pitch,
-    saas,
-    service,
-)
+from .. import config, db, pitch, service
 from ..bundle_editor import BundleEditError, photos_for_run, save_run_edits
 from ..gallery_media import (
     FULL_MAX_EDGE,
@@ -30,11 +23,7 @@ from ..gallery_media import (
     render_jpeg,
     resolve_photo_file,
 )
-from .deps import (
-    request_auth,
-    templates,
-    ui_context,
-)
+from .deps import templates, ui_context
 
 log = logging.getLogger("plutus")
 router = APIRouter()
@@ -42,8 +31,6 @@ router = APIRouter()
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    if config.SAAS_MODE:
-        return RedirectResponse("/ui/saas", status_code=302)
     runs = db.list_runs(limit=10)
     return templates.TemplateResponse(request, "index.html", {"runs": runs, "title": "upsell"})
 
@@ -56,8 +43,6 @@ def analyze_form(
     argus_run_id: int | None = Form(None),
     limit: int | None = Form(None),
 ):
-    if config.SAAS_MODE:
-        raise HTTPException(status_code=403, detail="use tenant portal in SaaS mode")
     path = Path(folder).expanduser()
     try:
         result = service.analyze_folder(path, name=name, argus_run_id=argus_run_id, limit=limit)
@@ -73,8 +58,7 @@ def analyze_form(
 
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 def view_run(request: Request, run_id: int):
-    ctx = request_auth(request)
-    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+    row = db.get_run(run_id)
     if not row:
         return HTMLResponse("Run not found", status_code=404)
     payload = row["payload"]
@@ -87,11 +71,6 @@ def view_run(request: Request, run_id: int):
         gallery_theme=payload.get("gallery_theme"),
         argus_run_id=row.get("argus_run_id"),
     )
-    # Studio mode recommends only — no client storefront / offer links. (The SaaS
-    # share-link path stays gated behind SAAS_MODE, which is off in studio.)
-    share_links = []
-    if config.SAAS_MODE and ctx and ctx.tenant_id:
-        share_links = db.list_storefront_tokens(ctx.tenant_id, run_id=run_id)
     gallery = db.get_gallery(row["gallery_id"])
     mise_gallery_id = gallery.get("mise_gallery_id") if gallery else None
     mise_gallery_url = (
@@ -115,29 +94,18 @@ def view_run(request: Request, run_id: int):
             gallery_theme=payload.get("gallery_theme"),
             pitch_text=pitch_text,
             title=f"run {run_id}",
-            share_links=share_links,
-            tenant=ctx.tenant if ctx and ctx.tenant else None,
+            share_links=[],
+            tenant=None,
         ),
     )
 
 
 def _run_edit_context(request: Request, run_id: int, **extra):
-    ctx = request_auth(request)
-    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+    row = db.get_run(run_id)
     if not row:
         return None
     gallery_name = db.get_gallery_name(row["gallery_id"]) or f"Run {run_id}"
     payload = row["payload"]
-    tenant_id = ctx.tenant_id if ctx and ctx.tenant_id else None
-    if config.SAAS_MODE:
-        save_action = "/ui/saas/app/run-edit"
-        sell_url = "/ui/saas/app/sell?run_id=" + str(run_id) if ctx and ctx.tenant_id else None
-    elif homelab.store_enabled():
-        save_action = "/ui/homelab/run-edit"
-        sell_url = None
-    else:
-        save_action = "/ui/homelab/run-edit"
-        sell_url = None
     return ui_context(
         request,
         run=row,
@@ -145,9 +113,9 @@ def _run_edit_context(request: Request, run_id: int, **extra):
         gallery_photos=photos_for_run(row),
         gallery_name=gallery_name,
         title=f"Edit run {run_id}",
-        save_action=save_action,
-        sell_url=sell_url,
-        tenant_id=tenant_id,
+        save_action="/ui/homelab/run-edit",
+        sell_url=None,
+        tenant_id=None,
         **extra,
     )
 
@@ -162,15 +130,12 @@ def edit_run(request: Request, run_id: int):
 
 @router.post("/ui/homelab/run-edit")
 async def ui_homelab_run_edit(request: Request, run_id: int = Form(...)):
-    if config.SAAS_MODE:
-        raise HTTPException(status_code=404, detail="use tenant portal")
-    tenant_id = homelab.tenant_id() if homelab.store_enabled() else None
     try:
         from ..bundle_editor import parse_bundle_form
 
         save_run_edits(
             run_id=run_id,
-            tenant_id=tenant_id,
+            tenant_id=None,
             bundle_edits=parse_bundle_form(await request.form()),
         )
     except BundleEditError as exc:
@@ -182,9 +147,8 @@ async def ui_homelab_run_edit(request: Request, run_id: int = Form(...)):
 
 
 @router.get("/runs/{run_id}/photo/{filename}")
-def run_photo(request: Request, run_id: int, filename: str, size: str = Query("thumb")):
-    ctx = request_auth(request)
-    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+def run_photo(run_id: int, filename: str, size: str = Query("thumb")):
+    row = db.get_run(run_id)
     if not row:
         return Response(status_code=404)
     gallery = db.get_gallery(row["gallery_id"])
@@ -209,18 +173,16 @@ def run_photo(request: Request, run_id: int, filename: str, size: str = Query("t
 
 
 @router.get("/runs/{run_id}/json", response_class=JSONResponse)
-def run_json(request: Request, run_id: int):
-    ctx = request_auth(request)
-    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+def run_json(run_id: int):
+    row = db.get_run(run_id)
     if not row:
         raise HTTPException(status_code=404, detail="run not found")
     return row
 
 
 @router.get("/runs/{run_id}/pitch.txt", response_class=PlainTextResponse)
-def run_pitch(request: Request, run_id: int):
-    ctx = request_auth(request)
-    row = saas.get_run_for_ctx(run_id, ctx) if config.SAAS_MODE else db.get_run(run_id)
+def run_pitch(run_id: int):
+    row = db.get_run(run_id)
     if not row:
         raise HTTPException(status_code=404, detail="run not found")
     payload = row["payload"]
