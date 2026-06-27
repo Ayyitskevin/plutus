@@ -9,7 +9,6 @@ _started_at = time.time()
 _counters: dict[str, int] = {
     "recommend_folder": 0,
     "recommend_mise": 0,
-    "rate_limit_exceeded": 0,
 }
 _gauges: dict[str, float] = {}
 _tenant_counters: dict[str, dict[str, int]] = {}

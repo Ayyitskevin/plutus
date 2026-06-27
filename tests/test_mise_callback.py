@@ -182,7 +182,6 @@ def studio_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MISE_HOOK_TOKEN", None)
     monkeypatch.setattr(config, "SERVICE_TOKENS", [])
     monkeypatch.setattr(config, "PUBLIC_URL", "http://plutus.test")
-    monkeypatch.setattr(config, "RATE_LIMIT_ENABLED", False)
     monkeypatch.setattr(config, "MISE_MEDIA_ROOT", tmp_path / "mise-media")
     from app.main import app
 

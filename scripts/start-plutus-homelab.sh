@@ -11,7 +11,6 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
-export PLUTUS_SAAS_MODE="${PLUTUS_SAAS_MODE:-false}"
 HOST="${PLUTUS_HOST:-0.0.0.0}"
 PORT="${PLUTUS_PORT:-8030}"
 

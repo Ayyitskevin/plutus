@@ -82,17 +82,5 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
-# Multi-tenant rate limiting (legacy SaaS) — inert in studio mode (SAAS_MODE is
-# always False here). Removed in a follow-up; retained this revision only so the
-# rate-limit middleware keeps its no-op guard.
-SAAS_MODE = False
-RATE_LIMIT_ENABLED = os.environ.get("PLUTUS_RATE_LIMIT_ENABLED", "true").lower() == "true"
-RATE_LIMIT_PER_MINUTE = int(os.environ.get("PLUTUS_RATE_LIMIT_PER_MINUTE", "60"))
-RATE_LIMIT_RECOMMEND_PER_MINUTE = int(
-    os.environ.get("PLUTUS_RATE_LIMIT_RECOMMEND_PER_MINUTE", "20")
-)
-RATE_LIMIT_TRUSTED_PROXY = os.environ.get("PLUTUS_RATE_LIMIT_TRUSTED_PROXY", "").strip().lower()
-REDIS_URL = os.environ.get("PLUTUS_REDIS_URL") or None
-
 LOG_LEVEL = os.environ.get("PLUTUS_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")

@@ -22,7 +22,6 @@ echo "==> run container on :$PORT"
 docker run -d --name "$CONTAINER" \
   -p "127.0.0.1:${PORT}:8030" \
   -e PLUTUS_API_TOKEN=ci-admin-token \
-  -e PLUTUS_RATE_LIMIT_ENABLED=false \
   -e PLUTUS_PUBLIC_URL="http://127.0.0.1:${PORT}" \
   -v "${DATA_DIR}:/data" \
   "$IMAGE"

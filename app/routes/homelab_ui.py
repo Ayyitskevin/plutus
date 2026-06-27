@@ -114,8 +114,6 @@ def _run_edit_context(request: Request, run_id: int, **extra):
         gallery_name=gallery_name,
         title=f"Edit run {run_id}",
         save_action="/ui/homelab/run-edit",
-        sell_url=None,
-        tenant_id=None,
         **extra,
     )
 
@@ -135,7 +133,6 @@ async def ui_homelab_run_edit(request: Request, run_id: int = Form(...)):
 
         save_run_edits(
             run_id=run_id,
-            tenant_id=None,
             bundle_edits=parse_bundle_form(await request.form()),
         )
     except BundleEditError as exc:

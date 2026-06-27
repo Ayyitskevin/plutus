@@ -61,8 +61,7 @@ def _enabled_bundles(bundles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [b for b in bundles if b.get("enabled", True) and b.get("items")]
 
 
-def estimated_total_cents(bundles: list[dict[str, Any]], tenant_id: str | None) -> int:
-    del tenant_id  # studio mode: catalog prices only, no tenant overrides
+def estimated_total_cents(bundles: list[dict[str, Any]]) -> int:
     total = 0
     for bundle in _enabled_bundles(bundles):
         total += sum(int(item.get("line_cents") or 0) for item in bundle.get("items") or [])
@@ -72,7 +71,6 @@ def estimated_total_cents(bundles: list[dict[str, Any]], tenant_id: str | None) 
 def apply_edits(
     *,
     run: dict[str, Any],
-    tenant_id: str | None,
     bundle_edits: list[dict[str, Any]],
 ) -> dict[str, Any]:
     payload = dict(run.get("payload") or {})
@@ -99,7 +97,7 @@ def apply_edits(
                     photo = photos.get(str(chosen))
                     if not photo:
                         raise BundleEditError(f"photo not in gallery: {chosen}")
-                    line = recommend.refresh_item_photo(line, photo, tenant_id=tenant_id)
+                    line = recommend.refresh_item_photo(line, photo)
             items_out.append(line)
         row["items"] = items_out
 
@@ -116,7 +114,7 @@ def apply_edits(
         updated.append(row)
 
     payload["bundles"] = updated
-    payload["estimated_total_cents"] = estimated_total_cents(updated, tenant_id)
+    payload["estimated_total_cents"] = estimated_total_cents(updated)
     return payload
 
 
@@ -164,19 +162,17 @@ def parse_bundle_form(form: Any) -> list[dict[str, Any]]:
 def save_run_edits(
     *,
     run_id: int,
-    tenant_id: str | None,
     bundle_edits: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    run = db.get_run(run_id, tenant_id=tenant_id)
+    run = db.get_run(run_id)
     if not run:
         raise BundleEditError("run not found")
-    payload = apply_edits(run=run, tenant_id=tenant_id, bundle_edits=bundle_edits)
+    payload = apply_edits(run=run, bundle_edits=bundle_edits)
     enabled = _enabled_bundles(payload.get("bundles") or [])
     if not enabled:
         raise BundleEditError("at least one bundle must stay enabled")
     db.update_run(
         run_id,
-        tenant_id=tenant_id,
         bundle_count=len(enabled),
         estimated_total_cents=int(payload.get("estimated_total_cents") or 0),
         payload=payload,

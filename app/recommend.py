@@ -90,18 +90,13 @@ def _gallery_theme(photos: list[Photo]) -> str:
     return "general"
 
 
-def refresh_item_photo(
-    item: dict[str, Any],
-    photo: Photo,
-    *,
-    tenant_id: str | None = None,
-) -> dict[str, Any]:
+def refresh_item_photo(item: dict[str, Any], photo: Photo) -> dict[str, Any]:
     """Re-bind a catalog line item to a different gallery photo."""
     product = catalog.get_product(str(item.get("sku") or ""))
     if not product:
         return item
     qty = int(item.get("qty") or item.get("quantity") or 1)
-    refreshed = _line_item(product, photo, qty=qty, tenant_id=tenant_id)
+    refreshed = _line_item(product, photo, qty=qty)
     return refreshed if refreshed else item
 
 
@@ -110,12 +105,9 @@ def _line_item(
     photo: Photo,
     *,
     qty: int = 1,
-    tenant_id: str | None = None,
 ) -> dict[str, Any]:
-    if tenant_id and not catalog.is_active(product.sku, tenant_id):
-        return {}
-    unit_cents = catalog.unit_cents_for(product.sku, tenant_id)
-    label = catalog.label_for(product.sku, tenant_id)
+    unit_cents = catalog.unit_cents_for(product.sku)
+    label = catalog.label_for(product.sku)
     return {
         "sku": product.sku,
         "label": label,
@@ -219,7 +211,7 @@ def _provenance(start: float) -> dict[str, Any]:
     }
 
 
-def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> dict[str, Any]:
+def recommend_bundles(photos: list[Photo]) -> dict[str, Any]:
     """Return client-ready upsell bundles for a gallery."""
     started = time.perf_counter()
     if not photos:
@@ -251,7 +243,7 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
         "id": "wall-hero",
         "title": "Statement wall piece",
         "pitch": _wall_pitch(theme, hero),
-        "items": [_line_item(canvas, hero, tenant_id=tenant_id)],
+        "items": [_line_item(canvas, hero)],
     })
 
     print_large = next(p for p in PRODUCTS if p.sku == "print-16x20")
@@ -264,7 +256,7 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
         "id": "editor-picks",
         "title": "Editor's pick trio",
         "pitch": "Three large fine-art prints from your highest-scoring frames.",
-        "items": [_line_item(print_large, p, tenant_id=tenant_id) for p in editor_picks],
+        "items": [_line_item(print_large, p) for p in editor_picks],
     })
 
     gift = next(p for p in PRODUCTS if p.sku == "gift-trio-8x10")
@@ -278,7 +270,7 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
         "id": "gift-trio",
         "title": "Giftable tabletop set",
         "pitch": gift_pitch,
-        "items": [_line_item(gift, gift_photos[0], qty=1, tenant_id=tenant_id)]
+        "items": [_line_item(gift, gift_photos[0], qty=1)]
         if gift_photos
         else [],
         "photo_slots": [p["filename"] for p in gift_photos[:3]],
@@ -291,7 +283,7 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
             "id": "metal-accent",
             "title": "Metal kitchen accent",
             "pitch": "Vivid metal print for chef's table, bar, or menu wall.",
-            "items": [_line_item(metal, metal_photo, tenant_id=tenant_id)],
+            "items": [_line_item(metal, metal_photo)],
         })
 
     keepers = [p for p in photos if _score(p) >= 0.68]
@@ -308,7 +300,7 @@ def recommend_bundles(photos: list[Photo], *, tenant_id: str | None = None) -> d
             "id": "signature-album",
             "title": "Signature layflat album",
             "pitch": album_pitch,
-            "items": [_line_item(album, _pick_top(keepers, 1)[0], tenant_id=tenant_id)],
+            "items": [_line_item(album, _pick_top(keepers, 1)[0])],
             "photo_slots": [p["filename"] for p in _pick_top(keepers, 30)],
         })
 
