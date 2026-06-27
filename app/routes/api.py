@@ -42,6 +42,16 @@ async def recommend_mise_gallery_api(
         correlation_id=correlation_id,
     )
     metrics.inc("recommend_mise")
+    # Optional async push back to Mise (default OFF — the synchronous response
+    # above stays the live contract). post_offer_callback never raises, so a
+    # callback failure cannot crash the recommend path.
+    if mise_client.callback_enabled():
+        result["callback"] = await run_sync(
+            mise_client.post_offer_callback,
+            gallery_id=mise_gallery_id,
+            payload=result,
+            correlation_id=correlation_id,
+        )
     return JSONResponse(result)
 
 
