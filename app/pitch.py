@@ -82,7 +82,7 @@ def render_pitch(
     lines.extend([
         f"Estimated bundle total (before shipping): {_money(estimated_total_cents)}",
         "",
-        "Reply with which bundle you'd like and I'll send a checkout link.",
+        "Reply with the bundle you'd like and I'll take care of the rest.",
         "",
         "— Kevin",
     ])
