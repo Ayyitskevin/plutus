@@ -50,65 +50,39 @@ def bundles_include_album(bundles: list) -> bool:
     return False
 
 
-def _override_map(tenant_id: str | None) -> dict[str, dict]:
-    if not tenant_id:
-        return {}
-    from . import db
-
-    return {row["sku"]: row for row in db.list_product_overrides(tenant_id)}
-
-
 def unit_cents_for(sku: str, tenant_id: str | None = None) -> int:
+    del tenant_id  # studio mode: fixed catalog prices, no tenant overrides
     product = get_product(sku)
-    if not product:
-        return 0
-    override = _override_map(tenant_id).get(sku)
-    if override and override.get("active", True) and override.get("unit_cents") is not None:
-        return int(override["unit_cents"])
-    return product.unit_cents
+    return product.unit_cents if product else 0
 
 
 def label_for(sku: str, tenant_id: str | None = None) -> str:
+    del tenant_id
     product = get_product(sku)
-    if not product:
-        return sku
-    override = _override_map(tenant_id).get(sku)
-    if override and override.get("label"):
-        return str(override["label"])
-    return product.label
+    return product.label if product else sku
 
 
 def is_active(sku: str, tenant_id: str | None = None) -> bool:
-    override = _override_map(tenant_id).get(sku)
-    if override is not None:
-        return bool(override.get("active", True))
+    del tenant_id
     return get_product(sku) is not None
 
 
 def list_catalog(tenant_id: str | None = None) -> list[dict]:
-    """Merge base SKUs with tenant overrides for pricing UI."""
-    overrides = _override_map(tenant_id)
+    """Base print/album catalog (studio mode — no tenant overrides)."""
+    del tenant_id
     rows = []
     for product in PRODUCTS:
-        override = overrides.get(product.sku)
-        active = override.get("active", True) if override else True
-        unit_cents = (
-            int(override["unit_cents"])
-            if override and override.get("unit_cents") is not None
-            else product.unit_cents
-        )
-        label = override.get("label") if override and override.get("label") else product.label
         rows.append(
             {
                 "sku": product.sku,
-                "label": label,
+                "label": product.label,
                 "base_label": product.label,
                 "category": product.category,
                 "size": product.size,
-                "unit_cents": unit_cents,
+                "unit_cents": product.unit_cents,
                 "base_cents": product.unit_cents,
-                "active": active,
-                "has_override": override is not None,
+                "active": True,
+                "has_override": False,
                 "notes": product.notes,
             }
         )
