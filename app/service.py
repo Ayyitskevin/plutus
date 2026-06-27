@@ -134,10 +134,15 @@ def analyze_mise_gallery(
 
 
 def studio_run_urls(run_id: int) -> dict[str, str]:
-    """Links for Mise admin — bundle review UI and copy-paste client pitch."""
+    """Links for Mise admin — bundle review UI and copy-paste client pitch.
+
+    `offer_url` is the contract name; `review_url` is kept as a backward-compatible
+    alias for the current Mise consumer.
+    """
     base = config.PUBLIC_URL.rstrip("/")
     return {
         "review_url": f"{base}/runs/{run_id}",
+        "offer_url": f"{base}/runs/{run_id}",
         "pitch_url": f"{base}/runs/{run_id}/pitch.txt",
     }
 
