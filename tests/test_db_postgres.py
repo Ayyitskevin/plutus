@@ -148,6 +148,30 @@ def test_postgres_increment_tenant_usage(pg_env):
     assert usage["recommends"] == 3
 
 
+def test_postgres_mise_gallery_idempotency_helpers(pg_env):
+    """Exercise the PR3 idempotency lookups on real Postgres (conftest forces
+    SQLite everywhere else, so this is the only Postgres coverage for them)."""
+    gid = db.insert_gallery(name="Tasting", source="/x", photo_count=3, mise_gallery_id=99)
+    rid = db.insert_run(
+        gallery_id=gid,
+        engine="mock",
+        bundle_count=1,
+        estimated_total_cents=1000,
+        payload={"bundles": []},
+    )
+    # Lookup by Mise id (studio scope: tenant_id IS NULL) finds the same gallery/run.
+    found = db.get_gallery_by_mise_id(99)
+    assert found is not None and int(found["id"]) == gid
+    assert db.run_id_for_gallery(gid) == rid
+    # A tenant-scoped lookup must NOT see the studio (NULL-tenant) gallery.
+    assert db.get_gallery_by_mise_id(99, tenant_id="pgco") is None
+    # update_gallery refreshes mutable metadata.
+    db.update_gallery(gid, name="Renamed", photo_count=8)
+    refreshed = db.get_gallery(gid)
+    assert refreshed["name"] == "Renamed"
+    assert refreshed["photo_count"] == 8
+
+
 def test_postgres_tenant_and_run_roundtrip(pg_env):
     tenants.create_tenant("pgco", name="PG Co", store_slug="pg-co")
     gid = db.insert_gallery(name="G", source="/x", photo_count=2, tenant_id="pgco")
