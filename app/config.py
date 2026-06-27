@@ -49,6 +49,11 @@ MISE_CALLBACK_ENABLED = (
 )
 MISE_CALLBACK_URL = os.environ.get("PLUTUS_MISE_CALLBACK_URL", "").rstrip("/") or None
 MISE_CALLBACK_TOKEN = os.environ.get("PLUTUS_MISE_CALLBACK_TOKEN") or None
+# Delivery hardening: transient failures retry with exponential backoff up to
+# MAX_ATTEMPTS (base * 2**n seconds), then the offer is dead-lettered locally
+# (re-deliverable) rather than lost. A 401 triggers a one-shot token refresh+retry.
+MISE_CALLBACK_MAX_ATTEMPTS = int(os.environ.get("PLUTUS_MISE_CALLBACK_MAX_ATTEMPTS", "3"))
+MISE_CALLBACK_BACKOFF_BASE = float(os.environ.get("PLUTUS_MISE_CALLBACK_BACKOFF_BASE", "0.5"))
 MISE_MEDIA_ROOT = (
     Path(os.environ.get("PLUTUS_MISE_MEDIA_ROOT", ""))
     if os.environ.get("PLUTUS_MISE_MEDIA_ROOT")

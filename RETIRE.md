@@ -71,8 +71,10 @@ If Plutus is kept, these are the contract with Mise (see `app/offer_schema.py`):
 ## SaaS surface — removed
 
 The SaaS/money/identity modules, their templates, and their database tables have
-been deleted. `migrate()` now creates **only** `galleries` and
-`recommendation_runs` — the recommendation run cache. There is no `tenants`,
-`orders`, `storefront_tokens`, `stripe_webhook_events`, `upload_batches`, … table,
-and no signup/tenant/subscription/Stripe/storefront/order/lab code in the tree.
-Plutus holds no authoritative state.
+been deleted. `migrate()` creates the recommendation run cache (`galleries`,
+`recommendation_runs`) plus `callback_deadletter` — an **operational outbox** for
+offer callbacks that exhausted retries (re-deliverable, disposable; each row's
+offer is reproducible from its run, so it is not authoritative state). There is no
+`tenants`, `orders`, `storefront_tokens`, `stripe_webhook_events`, `upload_batches`,
+… table, and no signup/tenant/subscription/Stripe/storefront/order/lab code in the
+tree. Plutus holds no authoritative business state.

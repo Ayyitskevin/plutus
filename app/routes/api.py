@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from .. import metrics, mise_client, service, service_tokens
+from .. import metrics, mise_callback, mise_client, offer_schema, service, service_tokens
 from ..async_io import run_sync
 from ..auth import require_bearer, token_from_request
 from ..auth_context import AuthContext
@@ -43,16 +43,25 @@ async def recommend_mise_gallery_api(
     )
     metrics.inc("recommend_mise")
     # Optional async push back to Mise (default OFF — the synchronous response
-    # above stays the live contract). post_offer_callback never raises, so a
-    # callback failure cannot crash the recommend path.
-    if mise_client.callback_enabled():
+    # above stays the live contract). deliver() never raises (retry/refresh/
+    # dead-letter handled internally), so a callback failure can't crash recommend.
+    if mise_callback.callback_enabled():
         result["callback"] = await run_sync(
-            mise_client.post_offer_callback,
+            mise_callback.deliver,
             gallery_id=mise_gallery_id,
-            payload=result,
+            run_id=result.get("run_id"),
+            payload=offer_schema.to_mise_offer(result),
             correlation_id=correlation_id,
         )
     return JSONResponse(result)
+
+
+@router.post("/admin/callbacks/redeliver")
+async def redeliver_callbacks_api(
+    ctx: AuthContext = Depends(require_bearer),
+) -> JSONResponse:
+    """Flush the callback dead-letter outbox (re-attempt persisted failures)."""
+    return JSONResponse(await run_sync(mise_callback.redeliver_pending))
 
 
 @router.post("/analyze-folder")

@@ -5,10 +5,18 @@ import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
 
-from .. import config, health, metrics, mise_client, offer_schema, recommend
+from .. import config, db, health, metrics, mise_callback, mise_client, offer_schema, recommend
 
 log = logging.getLogger("plutus")
 router = APIRouter()
+
+
+def _deadletter_pending() -> int | None:
+    """Count of un-delivered callbacks, or None if the DB is unavailable."""
+    try:
+        return db.count_callback_deadletter()
+    except Exception:  # noqa: BLE001 — healthz must never raise on a count
+        return None
 
 
 @router.get("/healthz")
@@ -22,6 +30,9 @@ def healthz() -> dict:
         "offer_schema_version": offer_schema.OFFER_SCHEMA_VERSION,
         "mise_configured": mise_client.is_enabled(),
         "auth_enabled": bool(config.API_TOKEN),
+        # Surface stuck offer deliveries (rotated-token / outage backlog).
+        "callback_enabled": mise_callback.callback_enabled(),
+        "callback_deadletter_pending": _deadletter_pending(),
     })
     return report
 
