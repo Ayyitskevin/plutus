@@ -62,7 +62,10 @@ bash scripts/dogfood-suite-loop.sh   # Mise gallery → Argus → Plutus (when f
 
 See `.env.homelab.example`. Required for Mise integration:
 
-- `PLUTUS_API_TOKEN` — shared secret with `MISE_PLUTUS_TOKEN`
+- `PLUTUS_API_TOKEN` — shared secret with `MISE_PLUTUS_TOKEN` (the same value on both sides)
+- `PLUTUS_SERVICE_TOKENS` — optional comma-separated extra tokens accepted on the
+  Mise recommend path. All registered tokens are compared in constant time; set the
+  NEW secret here during a rotation so publishing never 401s while you swap Mise over
 - `PLUTUS_MISE_URL` + `PLUTUS_MISE_API_TOKEN` — gallery metadata
 - `PLUTUS_MISE_MEDIA_ROOT` — synced originals (`scripts/sync-mise-media.sh`)
 - `PLUTUS_ARGUS_URL` + `PLUTUS_ARGUS_TOKEN` — optional vision enrichment

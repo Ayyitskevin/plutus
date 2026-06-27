@@ -1,30 +1,18 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from .. import config, metrics, mise_client, service
+from .. import metrics, mise_client, service, service_tokens
 from ..async_io import run_sync
-from ..auth import require_bearer, token_from_request, verify_api_access
+from ..auth import require_bearer, token_from_request
 from ..auth_context import AuthContext
 
 log = logging.getLogger("plutus")
 router = APIRouter()
-
-
-def _mise_recommend_uses_hook_token(request: Request) -> bool:
-    """Flow Mise syncs PLUTUS_MISE_HOOK_TOKEN as MISE_PLUTUS_TOKEN on publish."""
-    expected = config.MISE_HOOK_TOKEN
-    if not expected:
-        return False
-    provided = token_from_request(
-        request, authorization=request.headers.get("Authorization")
-    )
-    return bool(provided and secrets.compare_digest(provided, expected))
 
 
 @router.post("/recommend/mise-gallery")
@@ -36,8 +24,15 @@ async def recommend_mise_gallery_api(
 ) -> JSONResponse:
     from .. import mise_hook
 
-    if not _mise_recommend_uses_hook_token(request):
-        verify_api_access(request, authorization=request.headers.get("Authorization"))
+    # Single constant-time service-token register: PLUTUS_API_TOKEN,
+    # PLUTUS_MISE_HOOK_TOKEN, and any PLUTUS_SERVICE_TOKENS rotation tokens are all
+    # accepted. Open only when no token is configured (studio-dev default).
+    if service_tokens.auth_required():
+        provided = token_from_request(
+            request, authorization=request.headers.get("Authorization")
+        )
+        if not service_tokens.verify(provided):
+            raise HTTPException(status_code=401, detail="invalid or missing service token")
     result = await run_sync(
         mise_hook.recommend_published_gallery,
         mise_gallery_id=mise_gallery_id,

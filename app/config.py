@@ -26,6 +26,15 @@ ARGUS_ANALYZE_LIMIT = int(os.environ.get("PLUTUS_ARGUS_ANALYZE_LIMIT", "0"))
 
 API_TOKEN = os.environ.get("PLUTUS_API_TOKEN", "")
 
+# Extra accepted inbound service tokens (comma-separated) for the Mise
+# recommend/callback path, on top of API_TOKEN and MISE_HOOK_TOKEN. Lets a token
+# rotation keep the OLD and NEW token valid at once so the publish path never
+# hard-401s mid-rotation (the recurring drift between Mise's MISE_PLUTUS_TOKEN and
+# Plutus). All registered tokens are compared in constant time.
+SERVICE_TOKENS = [
+    t.strip() for t in os.environ.get("PLUTUS_SERVICE_TOKENS", "").split(",") if t.strip()
+]
+
 MISE_URL = os.environ.get("PLUTUS_MISE_URL", "").rstrip("/")
 MISE_API_TOKEN = os.environ.get("PLUTUS_MISE_API_TOKEN", "")
 MISE_TIMEOUT = int(os.environ.get("PLUTUS_MISE_TIMEOUT", "10"))

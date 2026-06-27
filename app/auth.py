@@ -67,7 +67,7 @@ def resolve_auth(
     )
 
     if config.SAAS_MODE:
-        if config.API_TOKEN and provided == config.API_TOKEN:
+        if config.API_TOKEN and provided and secrets.compare_digest(provided, config.API_TOKEN):
             ctx = AuthContext(is_admin=True)
             set_auth_context(ctx)
             request.state.auth = ctx
@@ -89,7 +89,7 @@ def resolve_auth(
 
     if not provided:
         raise HTTPException(status_code=401, detail="missing bearer token")
-    if provided != config.API_TOKEN:
+    if not secrets.compare_digest(provided, config.API_TOKEN):
         raise HTTPException(status_code=401, detail="invalid bearer token")
 
     ctx = AuthContext(is_admin=True)
