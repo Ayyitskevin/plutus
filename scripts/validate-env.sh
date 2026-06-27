@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fail fast on placeholder secrets before deploy.
+# Fail fast on placeholder secrets before deploy (single-operator Mise worker).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="${1:-$ROOT/.env}"
@@ -30,32 +30,12 @@ check_not_placeholder() {
   fi
 }
 
-if [[ "${PLUTUS_SAAS_MODE:-false}" == "true" ]]; then
-  check_not_placeholder PLUTUS_API_TOKEN
-  check_not_placeholder PLUTUS_TENANT_KEY_PEPPER
-  if [[ "${PLUTUS_TENANT_KEY_PEPPER:-}" == "${PLUTUS_API_TOKEN:-}" ]]; then
-    echo "ERROR: PLUTUS_TENANT_KEY_PEPPER must differ from PLUTUS_API_TOKEN"
-    errors=$((errors + 1))
-  fi
-  if [[ "${PLUTUS_TENANT_KEY_PEPPER:-}" == "plutus-dev-pepper" ]]; then
-    echo "ERROR: PLUTUS_TENANT_KEY_PEPPER is the dev default"
-    errors=$((errors + 1))
-  fi
-  if [[ -n "${STRIPE_SECRET_KEY:-}" ]]; then
-    check_not_placeholder STRIPE_SECRET_KEY
-  fi
-  if [[ "${PLUTUS_RATE_LIMIT_ENABLED:-true}" == "true" ]]; then
-    check_not_placeholder PLUTUS_REDIS_URL
-  else
-    echo "WARN: PLUTUS_RATE_LIMIT_ENABLED=false — per-IP/tenant limits off in SaaS"
-  fi
-  if [[ -n "${STRIPE_SECRET_KEY:-}" && -z "${STRIPE_WEBHOOK_SECRET:-}" ]]; then
-    echo "ERROR: STRIPE_SECRET_KEY set but STRIPE_WEBHOOK_SECRET unset"
-    errors=$((errors + 1))
-  fi
-  if [[ -n "${PLUTUS_MISE_HOOK_TOKEN:-}" ]]; then
-    check_not_placeholder PLUTUS_MISE_HOOK_TENANT_ID
-  fi
+# Inbound shared secret with Mise (== Mise's MISE_PLUTUS_TOKEN).
+check_not_placeholder PLUTUS_API_TOKEN
+
+# Mise read API, when wired, needs a real bearer.
+if [[ -n "${PLUTUS_MISE_URL:-}" ]]; then
+  check_not_placeholder PLUTUS_MISE_API_TOKEN
 fi
 
 if [[ "$errors" -gt 0 ]]; then

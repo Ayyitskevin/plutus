@@ -24,19 +24,17 @@ dev = [
   "pytest>=8.2,<9.0",
   "ruff>=0.6,<1.0",
 ]
-s3 = [
-  "boto3>=1.35,<2.0",
-]
 postgres = [
   "psycopg[binary]>=3.2,<4.0",
 ]
 redis = [
   "redis>=5.0,<6.0",
 ]
+# Aggregate extra installed in CI. boto3/S3 storage was removed; redis is retained
+# only while the legacy rate-limit middleware lives (slated for removal).
 saas = [
   "redis>=5.0,<6.0",
   "psycopg[binary]>=3.2,<4.0",
-  "boto3>=1.35,<2.0",
 ]
 
 [project.scripts]
