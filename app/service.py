@@ -38,21 +38,55 @@ def _persist_run(
     mise_gallery_id: int | None = None,
     tenant_id: str | None = None,
 ) -> dict[str, Any]:
-    gallery_id = db.insert_gallery(
-        name=name,
-        source=source,
-        photo_count=len(photos),
-        mise_gallery_id=mise_gallery_id,
-        tenant_id=tenant_id,
+    bundle_count = len(payload.get("bundles") or [])
+    total_cents = int(payload.get("estimated_total_cents") or 0)
+    engine = payload.get("engine", "mock")
+
+    existing = (
+        db.get_gallery_by_mise_id(mise_gallery_id, tenant_id=tenant_id)
+        if mise_gallery_id is not None
+        else None
     )
-    run_id = db.insert_run(
-        gallery_id=gallery_id,
-        engine=payload.get("engine", "mock"),
-        bundle_count=len(payload.get("bundles") or []),
-        estimated_total_cents=int(payload.get("estimated_total_cents") or 0),
-        payload=payload,
-        tenant_id=tenant_id,
-    )
+    if existing:
+        # Idempotency invariant: one stable offer per Mise gallery. Reuse the same
+        # gallery + run rows so a re-run refreshes the offer in place rather than
+        # creating a second offer or duplicate bundles. run_id stays stable.
+        gallery_id = int(existing["id"])
+        db.update_gallery(gallery_id, name=name, photo_count=len(photos))
+        run_id = db.run_id_for_gallery(gallery_id, tenant_id=tenant_id)
+        if run_id is not None:
+            db.update_run(
+                run_id,
+                tenant_id=tenant_id,
+                bundle_count=bundle_count,
+                estimated_total_cents=total_cents,
+                payload=payload,
+            )
+        else:
+            run_id = db.insert_run(
+                gallery_id=gallery_id,
+                engine=engine,
+                bundle_count=bundle_count,
+                estimated_total_cents=total_cents,
+                payload=payload,
+                tenant_id=tenant_id,
+            )
+    else:
+        gallery_id = db.insert_gallery(
+            name=name,
+            source=source,
+            photo_count=len(photos),
+            mise_gallery_id=mise_gallery_id,
+            tenant_id=tenant_id,
+        )
+        run_id = db.insert_run(
+            gallery_id=gallery_id,
+            engine=engine,
+            bundle_count=bundle_count,
+            estimated_total_cents=total_cents,
+            payload=payload,
+            tenant_id=tenant_id,
+        )
     return {
         "run_id": run_id,
         "gallery_id": gallery_id,
@@ -100,6 +134,7 @@ def analyze_mise_gallery(
     limit: int | None = None,
     argus_run_id: int | None = None,
     tenant_id: str | None = None,
+    correlation_id: str | None = None,
 ) -> dict[str, Any]:
     db.migrate()
     if not mise_client.is_enabled():
@@ -130,6 +165,10 @@ def analyze_mise_gallery(
     result.update(studio_run_urls(run_id))
     result["bundle_count"] = len(result.get("bundles") or [])
     result["estimated_total_cents"] = int(result.get("estimated_total_cents") or 0)
+    # Echo Mise's correlation id unchanged when provided (request metadata, not part
+    # of the persisted offer, so the stored run stays idempotent across retries).
+    if correlation_id:
+        result["correlation_id"] = correlation_id
     return result
 
 

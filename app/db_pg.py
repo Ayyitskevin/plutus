@@ -299,6 +299,9 @@ def migrate() -> None:
             )"""
         )
         for stmt in (
+            # Lookup index for one-stable-offer-per-gallery idempotency (not UNIQUE
+            # — old deployments may hold duplicate galleries).
+            "CREATE INDEX IF NOT EXISTS idx_galleries_mise ON galleries(mise_gallery_id)",
             "CREATE INDEX IF NOT EXISTS idx_upload_batches_status "
             "ON upload_batches(status, created_at)",
             "CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer ON tenants(stripe_customer_id)",
