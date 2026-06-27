@@ -14,6 +14,7 @@ def recommend_published_gallery(
     argus_run_id: int | None = None,
     limit: int | None = None,
     from_webhook: bool = False,
+    correlation_id: str | None = None,
 ) -> dict:
     del tenant_id, from_webhook  # studio mode: single operator, no tenant routing
     try:
@@ -22,6 +23,7 @@ def recommend_published_gallery(
             limit=limit,
             argus_run_id=argus_run_id,
             tenant_id=None,
+            correlation_id=correlation_id,
         )
     except MeteringError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc

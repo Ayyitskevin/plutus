@@ -238,6 +238,12 @@ def _sqlite_migrate() -> None:
         run_cols = {r[1] for r in con.execute("PRAGMA table_info(recommendation_runs)")}
         if "tenant_id" not in run_cols:
             con.execute("ALTER TABLE recommendation_runs ADD COLUMN tenant_id TEXT")
+        # Lookup index for one-stable-offer-per-gallery idempotency. Not UNIQUE:
+        # pre-existing deployments may hold duplicate galleries from the old
+        # always-insert behavior, and a unique constraint would fail to migrate.
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS idx_galleries_mise ON galleries(mise_gallery_id)"
+        )
         tenant_cols = {r[1] for r in con.execute("PRAGMA table_info(tenants)")}
         if "notify_email" not in tenant_cols:
             con.execute("ALTER TABLE tenants ADD COLUMN notify_email TEXT")
@@ -451,6 +457,67 @@ def get_gallery(gallery_id: int) -> dict[str, Any] | None:
     with connection() as con:
         row = con.execute("SELECT * FROM galleries WHERE id=?", (gallery_id,)).fetchone()
     return dict(row) if row else None
+
+
+def get_gallery_by_mise_id(
+    mise_gallery_id: int, *, tenant_id: str | None = None
+) -> dict[str, Any] | None:
+    """Earliest gallery for a Mise gallery id — the stable offer anchor.
+
+    Returns the lowest-id match so re-runs converge on a single gallery even if an
+    older deployment left duplicates behind from the previous always-insert path.
+    """
+    with connection() as con:
+        if tenant_id is None:
+            row = con.execute(
+                "SELECT * FROM galleries WHERE mise_gallery_id=? AND tenant_id IS NULL "
+                "ORDER BY id ASC LIMIT 1",
+                (mise_gallery_id,),
+            ).fetchone()
+        else:
+            row = con.execute(
+                "SELECT * FROM galleries WHERE mise_gallery_id=? AND tenant_id=? "
+                "ORDER BY id ASC LIMIT 1",
+                (mise_gallery_id, tenant_id),
+            ).fetchone()
+    return dict(row) if row else None
+
+
+def run_id_for_gallery(gallery_id: int, *, tenant_id: str | None = None) -> int | None:
+    """Canonical (earliest) recommendation run id for a gallery, or None."""
+    with connection() as con:
+        if tenant_id is None:
+            row = con.execute(
+                "SELECT id FROM recommendation_runs WHERE gallery_id=? "
+                "ORDER BY id ASC LIMIT 1",
+                (gallery_id,),
+            ).fetchone()
+        else:
+            row = con.execute(
+                "SELECT id FROM recommendation_runs WHERE gallery_id=? AND tenant_id=? "
+                "ORDER BY id ASC LIMIT 1",
+                (gallery_id, tenant_id),
+            ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def update_gallery(
+    gallery_id: int, *, name: str | None = None, photo_count: int | None = None
+) -> None:
+    """Refresh mutable gallery metadata when reusing the stable offer anchor."""
+    fields: list[str] = []
+    params: list[Any] = []
+    if name is not None:
+        fields.append("name=?")
+        params.append(name)
+    if photo_count is not None:
+        fields.append("photo_count=?")
+        params.append(photo_count)
+    if not fields:
+        return
+    params.append(gallery_id)
+    with connection() as con:
+        con.execute(f"UPDATE galleries SET {', '.join(fields)} WHERE id=?", tuple(params))
 
 
 def list_runs(*, limit: int = 20, tenant_id: str | None = None) -> list[dict[str, Any]]:

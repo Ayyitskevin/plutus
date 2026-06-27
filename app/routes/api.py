@@ -21,6 +21,7 @@ async def recommend_mise_gallery_api(
     mise_gallery_id: int = Form(...),
     limit: int | None = Form(None),
     argus_run_id: int | None = Form(None),
+    correlation_id: str | None = Form(None),
 ) -> JSONResponse:
     from .. import mise_hook
 
@@ -38,6 +39,7 @@ async def recommend_mise_gallery_api(
         mise_gallery_id=mise_gallery_id,
         argus_run_id=argus_run_id,
         limit=limit,
+        correlation_id=correlation_id,
     )
     metrics.inc("recommend_mise")
     return JSONResponse(result)
