@@ -115,3 +115,66 @@ def test_validator_rejects_drifted_total():
         ],
     }
     assert offer_schema.validate_offer(bad), "validator must catch total drift"
+
+
+def test_to_mise_offer_is_exact_strict_shape(tmp_db, tmp_path):
+    """The canonical projection is EXACTLY the contract keys — no UI extras."""
+    gid = 14
+    folder = tmp_path / "mise-media" / str(gid) / "original"
+    folder.mkdir(parents=True)
+    for i in range(14):
+        Image.new("RGB", (120, 90)).save(folder / f"img_{i:03d}.jpg")
+    row = {
+        "id": gid,
+        "title": "Tasting Menu",
+        "published": True,
+        "originals_path": str(folder),
+        "argus_last_run_id": None,
+    }
+    with patch("app.mise_client.get_gallery", return_value=row):
+        with patch("app.mise_client.is_enabled", return_value=True):
+            result = service.analyze_mise_gallery(gid, correlation_id="corr-1")
+
+    offer = offer_schema.to_mise_offer(result)
+
+    # Exact top-level shape (correlation_id echoed when present).
+    assert set(offer) == set(offer_schema.OFFER_KEYS) | {"correlation_id"}
+    assert offer["correlation_id"] == "corr-1"
+    assert offer["run_id"] == result["run_id"]
+    # No UI/superset keys leaked into the strict view.
+    for leaked in ("engine", "review_url", "top_photos", "gallery_theme", "bundle_count"):
+        assert leaked not in offer
+
+    assert offer["bundles"], "expected bundles"
+    for bundle in offer["bundles"]:
+        assert set(bundle) == set(offer_schema.BUNDLE_KEYS)
+        for line in bundle["line_items"]:
+            assert set(line) == set(offer_schema.LINE_ITEM_KEYS)
+        # Per-bundle cents reconcile to the line items (proposal money is 1:1).
+        assert bundle["estimated_cents"] == sum(
+            li["qty"] * li["unit_cents"] for li in bundle["line_items"]
+        )
+
+    # Validates clean, and totals reconcile across the whole offer.
+    assert offer_schema.validate_offer(offer) == []
+    assert offer["estimated_total_cents"] == sum(b["estimated_cents"] for b in offer["bundles"])
+
+
+def test_to_mise_offer_omits_correlation_when_absent(tmp_db, tmp_path):
+    gid = 15
+    folder = tmp_path / "mise-media" / str(gid) / "original"
+    folder.mkdir(parents=True)
+    Image.new("RGB", (120, 90)).save(folder / "a.jpg")
+    row = {
+        "id": gid,
+        "title": "G",
+        "published": True,
+        "originals_path": str(folder),
+        "argus_last_run_id": None,
+    }
+    with patch("app.mise_client.get_gallery", return_value=row):
+        with patch("app.mise_client.is_enabled", return_value=True):
+            result = service.analyze_mise_gallery(gid)
+    offer = offer_schema.to_mise_offer(result)
+    assert "correlation_id" not in offer
+    assert set(offer) == set(offer_schema.OFFER_KEYS)
