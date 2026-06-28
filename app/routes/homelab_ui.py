@@ -95,7 +95,6 @@ def view_run(request: Request, run_id: int):
             pitch_text=pitch_text,
             title=f"run {run_id}",
             share_links=[],
-            tenant=None,
         ),
     )
 

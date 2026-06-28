@@ -1,4 +1,4 @@
-"""Persistence for galleries, recommendations, tenants, and orders (SQLite or Postgres)."""
+"""Persistence for galleries and recommendation runs (SQLite or Postgres)."""
 from __future__ import annotations
 
 import json
@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS galleries (
     source TEXT,
     photo_count INTEGER NOT NULL DEFAULT 0,
     mise_gallery_id INTEGER,
-    tenant_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -42,7 +41,6 @@ CREATE TABLE IF NOT EXISTS recommendation_runs (
     bundle_count INTEGER NOT NULL DEFAULT 0,
     estimated_total_cents INTEGER NOT NULL DEFAULT 0,
     payload_json TEXT NOT NULL,
-    tenant_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -112,13 +110,11 @@ def backend_name() -> str:
 def _sqlite_migrate() -> None:
     with _sqlite_connection() as con:
         con.executescript(_SCHEMA)
+        # Back-fill mise_gallery_id on databases older than the Mise integration.
+        # (A legacy tenant_id column, if present, is left as harmless NULL.)
         gallery_cols = {r[1] for r in con.execute("PRAGMA table_info(galleries)")}
-        for col, typ in [("mise_gallery_id", "INTEGER"), ("tenant_id", "TEXT")]:
-            if col not in gallery_cols:
-                con.execute(f"ALTER TABLE galleries ADD COLUMN {col} {typ}")
-        run_cols = {r[1] for r in con.execute("PRAGMA table_info(recommendation_runs)")}
-        if "tenant_id" not in run_cols:
-            con.execute("ALTER TABLE recommendation_runs ADD COLUMN tenant_id TEXT")
+        if "mise_gallery_id" not in gallery_cols:
+            con.execute("ALTER TABLE galleries ADD COLUMN mise_gallery_id INTEGER")
         # Lookup index for one-stable-offer-per-gallery idempotency. Not UNIQUE:
         # pre-existing deployments may hold duplicate galleries from the old
         # always-insert behavior, and a unique constraint would fail to migrate.
@@ -145,14 +141,13 @@ def insert_gallery(
     source: str | None,
     photo_count: int,
     mise_gallery_id: int | None = None,
-    tenant_id: str | None = None,
 ) -> int:
     with connection() as con:
         return _insert_id(
             con,
-            """INSERT INTO galleries (name, source, photo_count, mise_gallery_id, tenant_id)
-               VALUES (?,?,?,?,?)""",
-            (name, source, photo_count, mise_gallery_id, tenant_id),
+            """INSERT INTO galleries (name, source, photo_count, mise_gallery_id)
+               VALUES (?,?,?,?)""",
+            (name, source, photo_count, mise_gallery_id),
         )
 
 
@@ -163,21 +158,19 @@ def insert_run(
     bundle_count: int,
     estimated_total_cents: int,
     payload: dict[str, Any],
-    tenant_id: str | None = None,
 ) -> int:
     with connection() as con:
         return _insert_id(
             con,
             """INSERT INTO recommendation_runs
-               (gallery_id, engine, bundle_count, estimated_total_cents, payload_json, tenant_id)
-               VALUES (?,?,?,?,?,?)""",
+               (gallery_id, engine, bundle_count, estimated_total_cents, payload_json)
+               VALUES (?,?,?,?,?)""",
             (
                 gallery_id,
                 engine,
                 bundle_count,
                 estimated_total_cents,
                 json.dumps(payload),
-                tenant_id,
             ),
         )
 
@@ -185,7 +178,6 @@ def insert_run(
 def update_run(
     run_id: int,
     *,
-    tenant_id: str | None = None,
     bundle_count: int | None = None,
     estimated_total_cents: int | None = None,
     payload: dict[str, Any] | None = None,
@@ -205,25 +197,16 @@ def update_run(
         return False
     sql = f"UPDATE recommendation_runs SET {', '.join(fields)} WHERE id=?"
     params.append(run_id)
-    if tenant_id:
-        sql += " AND tenant_id=?"
-        params.append(tenant_id)
     with connection() as con:
         cur = con.execute(sql, tuple(params))
         return cur.rowcount > 0
 
 
-def get_run(run_id: int, *, tenant_id: str | None = None) -> dict[str, Any] | None:
+def get_run(run_id: int) -> dict[str, Any] | None:
     with connection() as con:
-        if tenant_id:
-            row = con.execute(
-                "SELECT * FROM recommendation_runs WHERE id=? AND tenant_id=?",
-                (run_id, tenant_id),
-            ).fetchone()
-        else:
-            row = con.execute(
-                "SELECT * FROM recommendation_runs WHERE id=?", (run_id,)
-            ).fetchone()
+        row = con.execute(
+            "SELECT * FROM recommendation_runs WHERE id=?", (run_id,)
+        ).fetchone()
     if not row:
         return None
     out = dict(row)
@@ -245,49 +228,27 @@ def get_gallery(gallery_id: int) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
-def get_gallery_by_mise_id(
-    mise_gallery_id: int, *, tenant_id: str | None = None
-) -> dict[str, Any] | None:
+def get_gallery_by_mise_id(mise_gallery_id: int) -> dict[str, Any] | None:
     """Earliest gallery for a Mise gallery id — the stable offer anchor.
 
     Returns the lowest-id match so re-runs converge on a single gallery even if an
     older deployment left duplicates behind from the previous always-insert path.
     """
     with connection() as con:
-        if tenant_id is None:
-            row = con.execute(
-                "SELECT * FROM galleries WHERE mise_gallery_id=? AND tenant_id IS NULL "
-                "ORDER BY id ASC LIMIT 1",
-                (mise_gallery_id,),
-            ).fetchone()
-        else:
-            row = con.execute(
-                "SELECT * FROM galleries WHERE mise_gallery_id=? AND tenant_id=? "
-                "ORDER BY id ASC LIMIT 1",
-                (mise_gallery_id, tenant_id),
-            ).fetchone()
+        row = con.execute(
+            "SELECT * FROM galleries WHERE mise_gallery_id=? ORDER BY id ASC LIMIT 1",
+            (mise_gallery_id,),
+        ).fetchone()
     return dict(row) if row else None
 
 
-def run_id_for_gallery(gallery_id: int, *, tenant_id: str | None = None) -> int | None:
-    """Canonical (earliest) recommendation run id for a gallery, or None.
-
-    Scopes by tenant the same way get_gallery_by_mise_id does, so the studio
-    (tenant_id IS NULL) anchor never reaches across to a tenant-scoped run.
-    """
+def run_id_for_gallery(gallery_id: int) -> int | None:
+    """Canonical (earliest) recommendation run id for a gallery, or None."""
     with connection() as con:
-        if tenant_id is None:
-            row = con.execute(
-                "SELECT id FROM recommendation_runs WHERE gallery_id=? AND tenant_id IS NULL "
-                "ORDER BY id ASC LIMIT 1",
-                (gallery_id,),
-            ).fetchone()
-        else:
-            row = con.execute(
-                "SELECT id FROM recommendation_runs WHERE gallery_id=? AND tenant_id=? "
-                "ORDER BY id ASC LIMIT 1",
-                (gallery_id, tenant_id),
-            ).fetchone()
+        row = con.execute(
+            "SELECT id FROM recommendation_runs WHERE gallery_id=? ORDER BY id ASC LIMIT 1",
+            (gallery_id,),
+        ).fetchone()
     return int(row["id"]) if row else None
 
 
@@ -310,29 +271,17 @@ def update_gallery(
         con.execute(f"UPDATE galleries SET {', '.join(fields)} WHERE id=?", tuple(params))
 
 
-def list_runs(*, limit: int = 20, tenant_id: str | None = None) -> list[dict[str, Any]]:
+def list_runs(*, limit: int = 20) -> list[dict[str, Any]]:
     with connection() as con:
-        if tenant_id:
-            rows = con.execute(
-                """SELECT r.id, r.gallery_id, r.engine, r.bundle_count,
-                          r.estimated_total_cents, r.created_at, g.name AS gallery_name,
-                          json_extract(r.payload_json, '$.gallery_theme') AS gallery_theme
-                   FROM recommendation_runs r
-                   JOIN galleries g ON g.id = r.gallery_id
-                   WHERE r.tenant_id=?
-                   ORDER BY r.id DESC LIMIT ?""",
-                (tenant_id, limit),
-            ).fetchall()
-        else:
-            rows = con.execute(
-                """SELECT r.id, r.gallery_id, r.engine, r.bundle_count,
-                          r.estimated_total_cents, r.created_at, g.name AS gallery_name,
-                          json_extract(r.payload_json, '$.gallery_theme') AS gallery_theme
-                   FROM recommendation_runs r
-                   JOIN galleries g ON g.id = r.gallery_id
-                   ORDER BY r.id DESC LIMIT ?""",
-                (limit,),
-            ).fetchall()
+        rows = con.execute(
+            """SELECT r.id, r.gallery_id, r.engine, r.bundle_count,
+                      r.estimated_total_cents, r.created_at, g.name AS gallery_name,
+                      json_extract(r.payload_json, '$.gallery_theme') AS gallery_theme
+               FROM recommendation_runs r
+               JOIN galleries g ON g.id = r.gallery_id
+               ORDER BY r.id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
     return [dict(r) for r in rows]
 
 
