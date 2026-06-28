@@ -122,12 +122,12 @@ def test_postgres_mise_gallery_idempotency_helpers(pg_env):
         estimated_total_cents=1000,
         payload={"bundles": []},
     )
-    # Lookup by Mise id (studio scope: tenant_id IS NULL) finds the same gallery/run.
+    # Lookup by Mise id finds the same gallery/run (the stable offer anchor).
     found = db.get_gallery_by_mise_id(99)
     assert found is not None and int(found["id"]) == gid
     assert db.run_id_for_gallery(gid) == rid
-    # A tenant-scoped lookup must NOT see the studio (NULL-tenant) gallery.
-    assert db.get_gallery_by_mise_id(99, tenant_id="pgco") is None
+    # An unknown Mise id has no anchor.
+    assert db.get_gallery_by_mise_id(12345) is None
     # update_gallery refreshes mutable metadata.
     db.update_gallery(gid, name="Renamed", photo_count=8)
     refreshed = db.get_gallery(gid)

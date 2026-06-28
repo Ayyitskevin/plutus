@@ -102,4 +102,6 @@ offer callbacks that exhausted retries (re-deliverable, disposable; each row's
 offer is reproducible from its run, so it is not authoritative state). There is no
 `tenants`, `orders`, `storefront_tokens`, `stripe_webhook_events`, `upload_batches`,
 … table, and no signup/tenant/subscription/Stripe/storefront/order/lab code in the
-tree. Plutus holds no authoritative business state.
+tree. The cache tables carry no `tenant_id` — Plutus is single-operator, so the
+column and its query scoping were removed. Plutus holds no authoritative business
+state.

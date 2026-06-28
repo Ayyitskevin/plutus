@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS galleries (
     source TEXT,
     photo_count INTEGER NOT NULL DEFAULT 0,
     mise_gallery_id INTEGER,
-    tenant_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -29,7 +28,6 @@ CREATE TABLE IF NOT EXISTS recommendation_runs (
     bundle_count INTEGER NOT NULL DEFAULT 0,
     estimated_total_cents INTEGER NOT NULL DEFAULT 0,
     payload_json TEXT NOT NULL,
-    tenant_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
