@@ -1,4 +1,4 @@
-"""Print & album product catalog with optional tenant price overrides."""
+"""Print & album product catalog — fixed single-operator price estimates."""
 from __future__ import annotations
 
 from dataclasses import dataclass
